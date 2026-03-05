@@ -17,6 +17,9 @@ class User(SQLModel, table=True):
     # Relationship: User has many posts
     posts: list["Post"] = Relationship(back_populates="author")
 
+    # Relationship: User has many comments
+    comments: list["Comment"] = Relationship(back_populates="author")
+
     @query(name="users", description="Get all users with optional limit")
     async def get_all(
         cls, limit: int = 10, query_meta: Optional[QueryMeta] = None
@@ -66,6 +69,9 @@ class Post(SQLModel, table=True):
 
     # Relationship: Post belongs to User
     author: Optional["User"] = Relationship(back_populates="posts")
+
+    # Relationship: Post has many comments
+    comments: list["Comment"] = Relationship(back_populates="post")
 
     @query(name="posts", description="Get all posts with optional limit")
     async def get_all(
@@ -118,3 +124,84 @@ class Post(SQLModel, table=True):
             await session.commit()
             await session.refresh(post)
             return post
+
+
+class Comment(SQLModel, table=True):
+    """Comment entity."""
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    content: str
+    post_id: int = Field(foreign_key="post.id")
+    author_id: int = Field(foreign_key="user.id")
+
+    # Relationship: Comment belongs to Post
+    post: Optional["Post"] = Relationship(back_populates="comments")
+
+    # Relationship: Comment belongs to User
+    author: Optional["User"] = Relationship(back_populates="comments")
+
+    @query(name="comments", description="Get all comments with optional limit")
+    async def get_all(
+        cls, limit: int = 10, query_meta: Optional[QueryMeta] = None
+    ) -> list["Comment"]:
+        """Get all comments with optional limit."""
+        from demo.database import async_session
+
+        async with async_session() as session:
+            stmt = select(cls).limit(limit)
+            if query_meta:
+                stmt = stmt.options(*query_meta.to_options(cls))
+            result = await session.exec(stmt)
+            return list(result.all())
+
+    @query(name="comment", description="Get a comment by ID")
+    async def get_by_id(cls, id: int, query_meta: Optional[QueryMeta] = None) -> Optional["Comment"]:
+        """Get a comment by ID."""
+        from demo.database import async_session
+
+        async with async_session() as session:
+            stmt = select(cls).where(cls.id == id)
+            if query_meta:
+                stmt = stmt.options(*query_meta.to_options(cls))
+            result = await session.exec(stmt)
+            return result.first()
+
+    @query(name="comments_by_post", description="Get comments by post ID")
+    async def get_by_post(
+        cls, post_id: int, limit: int = 10, query_meta: Optional[QueryMeta] = None
+    ) -> list["Comment"]:
+        """Get comments by post ID."""
+        from demo.database import async_session
+
+        async with async_session() as session:
+            stmt = select(cls).where(cls.post_id == post_id).limit(limit)
+            if query_meta:
+                stmt = stmt.options(*query_meta.to_options(cls))
+            result = await session.exec(stmt)
+            return list(result.all())
+
+    @query(name="comments_by_author", description="Get comments by author ID")
+    async def get_by_author(
+        cls, author_id: int, limit: int = 10, query_meta: Optional[QueryMeta] = None
+    ) -> list["Comment"]:
+        """Get comments by author ID."""
+        from demo.database import async_session
+
+        async with async_session() as session:
+            stmt = select(cls).where(cls.author_id == author_id).limit(limit)
+            if query_meta:
+                stmt = stmt.options(*query_meta.to_options(cls))
+            result = await session.exec(stmt)
+            return list(result.all())
+
+    @mutation(name="create_comment", description="Create a new comment")
+    async def create(cls, content: str, post_id: int, author_id: int) -> "Comment":
+        """Create a new comment."""
+        from demo.database import async_session
+
+        async with async_session() as session:
+            comment = cls(content=content, post_id=post_id, author_id=author_id)
+            session.add(comment)
+            await session.commit()
+            await session.refresh(comment)
+            return comment
