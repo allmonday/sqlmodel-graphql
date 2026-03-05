@@ -12,8 +12,8 @@ from pydantic import BaseModel
 from typing import Optional, Dict, Any
 
 from sqlmodel_graphql import GraphQLHandler
-from models import User, Post
-from database import init_db
+from demo.models import User, Post
+from demo.database import init_db
 
 # GraphiQL HTML (loaded via CDN)
 GRAPHIQL_HTML = """
@@ -86,6 +86,20 @@ query GetUsers {
   }
 }
 
+# Get users with their posts (relationship)
+query GetUsersWithPosts {
+  users(limit: 5) {
+    id
+    name
+    email
+    posts {
+      id
+      title
+      content
+    }
+  }
+}
+
 # Get a specific user by ID
 query GetUser {
   user(id: 1) {
@@ -102,6 +116,20 @@ query GetPosts {
     title
     content
     author_id
+  }
+}
+
+# Get posts with their authors (relationship)
+query GetPostsWithAuthors {
+  posts(limit: 5) {
+    id
+    title
+    content
+    author {
+      id
+      name
+      email
+    }
   }
 }
 

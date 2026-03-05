@@ -29,7 +29,24 @@ def _serialize_value(value: Any, include: set[str] | None = None) -> Any:
 
     # Handle SQLModel instances
     if hasattr(value, "model_dump"):
-        return value.model_dump(include=include)
+        # Get base fields from model_dump
+        result = value.model_dump()
+
+        # If include is specified, filter fields
+        if include:
+            result = {k: v for k, v in result.items() if k in include}
+
+        # Handle relationship fields that are not included in model_dump
+        # These need to be serialized separately
+        if include:
+            for field_name in include:
+                if field_name not in result and hasattr(value, field_name):
+                    field_value = getattr(value, field_name)
+                    # Check if it's a relationship (list or another SQLModel)
+                    if field_value is not None:
+                        result[field_name] = _serialize_value(field_value)
+
+        return result
 
     # Handle lists
     if isinstance(value, list):

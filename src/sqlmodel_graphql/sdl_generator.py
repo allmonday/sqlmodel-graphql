@@ -163,17 +163,35 @@ class SDLGenerator:
         """Convert type hint to GraphQL type if it's an entity reference."""
         origin = get_origin(hint)
 
+        # Handle SQLAlchemy Mapped wrapper (used by SQLModel Relationship)
+        # Mapped[T] -> extract T and process recursively
+        if origin is not None:
+            origin_name = getattr(origin, "__name__", "") or getattr(origin, "_name", "")
+            if origin_name == "Mapped" or str(origin).endswith("Mapped"):
+                args = get_args(hint)
+                if args:
+                    return self._type_hint_to_graphql(args[0])
+
         # Handle list of entities
         if origin is list:
             args = get_args(hint)
             if args:
                 inner = args[0]
+                # Handle Optional inside list (e.g., list[Optional[User]])
+                if _is_optional(inner):
+                    inner = _unwrap_optional(inner)
                 if isinstance(inner, str):
                     # Forward reference
                     return f"[{inner}!]!"
-                if inner.__name__ in self._entity_names:
+                if isinstance(inner, type) and inner.__name__ in self._entity_names:
                     return f"[{inner.__name__}!]!"
             return None
+
+        # Handle Optional entity (e.g., Optional[User])
+        if _is_optional(hint):
+            inner = _unwrap_optional(hint)
+            if isinstance(inner, type) and inner.__name__ in self._entity_names:
+                return f"{inner.__name__}"
 
         # Handle single entity
         if isinstance(hint, type) and hint.__name__ in self._entity_names:

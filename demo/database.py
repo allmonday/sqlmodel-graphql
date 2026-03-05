@@ -19,7 +19,7 @@ async def get_session() -> AsyncSession:
 async def init_db() -> None:
     """Initialize database tables and seed data."""
     from sqlmodel import SQLModel
-    from models import User, Post
+    from demo.models import User, Post
 
     async with engine.begin() as conn:
         await conn.run_sync(SQLModel.metadata.create_all)

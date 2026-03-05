@@ -19,6 +19,8 @@ classifiers = [
 dependencies = [
     "sqlmodel>=0.0.14",
     "graphql-core>=3.2.0",
+    "greenlet>=3.3.2",
+    "aiosqlite>=0.22.1",
 ]
 
 [project.optional-dependencies]
