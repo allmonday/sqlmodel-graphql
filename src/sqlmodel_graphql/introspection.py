@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import inspect
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Callable, Union, get_args, get_origin, get_type_hints
+from typing import TYPE_CHECKING, Any, Callable, get_type_hints
+
+from sqlmodel_graphql.type_converter import TypeConverter
 
 if TYPE_CHECKING:
     from sqlmodel import SQLModel
@@ -34,6 +36,8 @@ class IntrospectionGenerator:
         self._entity_names = {e.__name__ for e in entities}
         self._query_methods = query_methods
         self._mutation_methods = mutation_methods
+        # Initialize converter before _collect_enum_types which uses it
+        self._converter = TypeConverter(self._entity_names)
         self._enum_types = self._collect_enum_types()
 
     def generate(self) -> dict[str, Any]:
@@ -145,48 +149,7 @@ class IntrospectionGenerator:
 
     def _is_entity_relationship(self, hint: Any) -> bool:
         """Check if a type hint represents a relationship to another entity."""
-        origin = get_origin(hint)
-
-        # Handle SQLAlchemy Mapped wrapper (used by SQLModel Relationship)
-        if origin is not None:
-            origin_name = getattr(origin, "__name__", "") or getattr(origin, "_name", "")
-            if origin_name == "Mapped" or str(origin).endswith("Mapped"):
-                args = get_args(hint)
-                if args:
-                    return self._is_entity_relationship(args[0])
-
-        # Handle list of entities
-        if origin is list:
-            args = get_args(hint)
-            if args:
-                inner = args[0]
-                # Handle Optional inside list
-                inner_origin = get_origin(inner)
-                if inner_origin is Union:
-                    inner_args = get_args(inner)
-                    non_none = [a for a in inner_args if a is not type(None)]
-                    if non_none:
-                        inner = non_none[0]
-                if isinstance(inner, str):
-                    # Forward reference
-                    return inner in self._entity_names
-                if isinstance(inner, type) and inner.__name__ in self._entity_names:
-                    return True
-            return False
-
-        # Handle Optional entity (Union with None)
-        if origin is Union:
-            args = get_args(hint)
-            non_none = [a for a in args if a is not type(None)]
-            if non_none:
-                return self._is_entity_relationship(non_none[0])
-            return False
-
-        # Handle single entity
-        if isinstance(hint, type) and hint.__name__ in self._entity_names:
-            return True
-
-        return False
+        return self._converter.is_relationship(hint)
 
     def _build_enum_type(self, enum_class: type[Enum]) -> dict:
         """Build introspection data for an enum type."""
@@ -297,57 +260,38 @@ class IntrospectionGenerator:
         if python_type is None:
             return {"kind": "SCALAR", "name": "String", "ofType": None}
 
-        origin = get_origin(python_type)
-
-        # Handle SQLAlchemy Mapped wrapper (used by SQLModel Relationship)
-        if origin is not None:
-            origin_name = getattr(origin, "__name__", "") or getattr(origin, "_name", "")
-            if origin_name == "Mapped" or str(origin).endswith("Mapped"):
-                args = get_args(python_type)
-                if args:
-                    return self._build_type_ref(args[0], is_input, required)
+        # Unwrap Mapped wrapper if present
+        if self._converter.is_mapped_wrapper(python_type):
+            python_type = self._converter.unwrap_mapped(python_type)
 
         # Optional[T] -> required=False
-        if origin is Union:
-            args = get_args(python_type)
-            non_none = [a for a in args if a is not type(None)]
-            if non_none:
-                return self._build_type_ref(non_none[0], is_input, required=False)
-            return {"kind": "SCALAR", "name": "String", "ofType": None}
+        if self._converter.is_optional(python_type):
+            inner = self._converter.unwrap_optional(python_type)
+            return self._build_type_ref(inner, is_input, required=False)
 
         # list[T] -> LIST wrapper
-        if origin is list:
-            args = get_args(python_type)
-            if args:
-                inner_ref = self._build_type_ref(args[0], is_input, required=True)
-            else:
-                inner_ref = {"kind": "SCALAR", "name": "String", "ofType": None}
+        if self._converter.is_list_type(python_type):
+            inner = self._converter.get_list_inner_type(python_type)
+            inner_ref = self._build_type_ref(inner, is_input, required=True)
 
             list_ref = {"kind": "LIST", "name": None, "ofType": inner_ref}
             if required:
                 return {"kind": "NON_NULL", "name": None, "ofType": list_ref}
             return list_ref
 
-        # Basic scalar types
-        type_map: dict[Any, str] = {
-            int: "Int",
-            str: "String",
-            bool: "Boolean",
-            float: "Float",
-        }
-
-        if python_type in type_map:
-            type_name = type_map[python_type]
+        # Scalar types
+        scalar_name = self._converter.get_scalar_type_name(python_type)
+        if scalar_name:
             if required:
                 return {
                     "kind": "NON_NULL",
                     "name": None,
-                    "ofType": {"kind": "SCALAR", "name": type_name, "ofType": None},
+                    "ofType": {"kind": "SCALAR", "name": scalar_name, "ofType": None},
                 }
-            return {"kind": "SCALAR", "name": type_name, "ofType": None}
+            return {"kind": "SCALAR", "name": scalar_name, "ofType": None}
 
         # Enum types
-        if isinstance(python_type, type) and issubclass(python_type, Enum):
+        if self._converter.is_enum_type(python_type):
             if required:
                 return {
                     "kind": "NON_NULL",
@@ -357,26 +301,15 @@ class IntrospectionGenerator:
             return {"kind": "ENUM", "name": python_type.__name__, "ofType": None}
 
         # Entity types
-        type_name = getattr(python_type, "__name__", None)
-        if type_name and type_name in self._entity_names:
+        entity_name = self._converter.get_entity_name(python_type)
+        if entity_name:
             if required:
                 return {
                     "kind": "NON_NULL",
                     "name": None,
-                    "ofType": {"kind": "OBJECT", "name": type_name, "ofType": None},
+                    "ofType": {"kind": "OBJECT", "name": entity_name, "ofType": None},
                 }
-            return {"kind": "OBJECT", "name": type_name, "ofType": None}
-
-        # Forward reference (string)
-        if isinstance(python_type, str):
-            if python_type in self._entity_names:
-                if required:
-                    return {
-                        "kind": "NON_NULL",
-                        "name": None,
-                        "ofType": {"kind": "OBJECT", "name": python_type, "ofType": None},
-                    }
-                return {"kind": "OBJECT", "name": python_type, "ofType": None}
+            return {"kind": "OBJECT", "name": entity_name, "ofType": None}
 
         # Default to String
         if required:
@@ -391,17 +324,9 @@ class IntrospectionGenerator:
         self, name: str, python_type: Any, description: str | None = None
     ) -> dict:
         """Build introspection data for a field."""
-        type_ref = self._build_type_ref(python_type, is_input=False, required=True)
-
         # Check if the type is optional (should not be NON_NULL)
-        origin = get_origin(python_type)
-        if origin is Union:
-            args = get_args(python_type)
-            if type(None) in args:
-                # It's optional, rebuild without required wrapper
-                non_none = [a for a in args if a is not type(None)]
-                if non_none:
-                    type_ref = self._build_type_ref(non_none[0], is_input=False, required=False)
+        required = not self._converter.is_optional(python_type)
+        type_ref = self._build_type_ref(python_type, is_input=False, required=required)
 
         return {
             "name": name,
@@ -440,24 +365,12 @@ class IntrospectionGenerator:
                 continue
 
             for field_type in hints.values():
-                # Handle direct enum type
-                if isinstance(field_type, type) and issubclass(field_type, Enum):
-                    enums[field_type.__name__] = field_type
-                    continue
+                # Unwrap to base type (handles Optional, list, Mapped)
+                base_type = self._converter.unwrap_to_base_type(field_type)
 
-                # Handle Optional[Enum] or list[Enum]
-                origin = get_origin(field_type)
-                if origin is Union:
-                    args = get_args(field_type)
-                    for arg in args:
-                        if isinstance(arg, type) and issubclass(arg, Enum):
-                            enums[arg.__name__] = arg
-                elif origin is list:
-                    args = get_args(field_type)
-                    if args:
-                        inner = args[0]
-                        if isinstance(inner, type) and issubclass(inner, Enum):
-                            enums[inner.__name__] = inner
+                # Check if it's an enum
+                if self._converter.is_enum_type(base_type):
+                    enums[base_type.__name__] = base_type
 
         # Also collect enums from query/mutation method signatures
         for methods in [self._query_methods, self._mutation_methods]:
@@ -469,7 +382,7 @@ class IntrospectionGenerator:
                     continue
 
                 for hint in hints.values():
-                    if isinstance(hint, type) and issubclass(hint, Enum):
+                    if self._converter.is_enum_type(hint):
                         enums[hint.__name__] = hint
 
         return enums

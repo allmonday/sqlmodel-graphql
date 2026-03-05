@@ -4,34 +4,19 @@ from __future__ import annotations
 
 import inspect
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Union, get_args, get_origin, get_type_hints
+from typing import TYPE_CHECKING, Any, get_args, get_origin, get_type_hints
 
 from sqlmodel import SQLModel
+
+from sqlmodel_graphql.type_converter import TypeConverter
 
 if TYPE_CHECKING:
     pass
 
 
-def _is_optional(type_hint: Any) -> bool:
-    """Check if a type hint is Optional (Union with None)."""
-    origin = get_origin(type_hint)
-    if origin is Union:
-        args = get_args(type_hint)
-        return type(None) in args
-    return False
-
-
-def _unwrap_optional(type_hint: Any) -> Any:
-    """Unwrap Optional to get the inner type."""
-    origin = get_origin(type_hint)
-    if origin is Union:
-        args = get_args(type_hint)
-        non_none_args = [a for a in args if a is not type(None)]
-        return non_none_args[0] if non_none_args else type_hint
-    return type_hint
-
-
-def _python_type_to_graphql(python_type: Any, entities: list[type[SQLModel]]) -> str:
+def _python_type_to_graphql(
+    python_type: Any, converter: TypeConverter
+) -> str:
     """Convert Python type to GraphQL type string."""
     origin = get_origin(python_type)
 
@@ -39,43 +24,34 @@ def _python_type_to_graphql(python_type: Any, entities: list[type[SQLModel]]) ->
     if origin is list:
         args = get_args(python_type)
         if args:
-            inner_type = _python_type_to_graphql_inner(args[0], entities)
+            inner_type = _python_type_to_graphql_inner(args[0], converter)
             return f"[{inner_type}!]!"
         return "[String!]!"
 
     # Handle Optional
-    if _is_optional(python_type):
-        inner = _unwrap_optional(python_type)
-        return _python_type_to_graphql_inner(inner, entities)
+    if converter.is_optional(python_type):
+        inner = converter.unwrap_optional(python_type)
+        return _python_type_to_graphql_inner(inner, converter)
 
     # Non-nullable type
-    return _python_type_to_graphql_inner(python_type, entities, nullable=False)
+    return _python_type_to_graphql_inner(python_type, converter, nullable=False)
 
 
 def _python_type_to_graphql_inner(
-    python_type: Any, entities: list[type[SQLModel]], nullable: bool = True
+    python_type: Any, converter: TypeConverter, nullable: bool = True
 ) -> str:
     """Convert Python type to GraphQL type string (inner, without list wrapper)."""
     # Handle enum types
-    if isinstance(python_type, type) and issubclass(python_type, Enum):
+    if converter.is_enum_type(python_type):
         return python_type.__name__
 
     # Check if it's an entity type
-    for entity in entities:
-        if python_type is entity or (
-            isinstance(python_type, type) and issubclass(python_type, entity)
-        ):
-            return f"{python_type.__name__}{'!' if not nullable else ''}"
+    entity_name = converter.get_entity_name(python_type)
+    if entity_name:
+        return f"{entity_name}{'!' if not nullable else ''}"
 
     # Handle basic Python types
-    type_map: dict[Any, str] = {
-        int: "Int",
-        str: "String",
-        bool: "Boolean",
-        float: "Float",
-    }
-
-    base_type = type_map.get(python_type, "String")
+    base_type = converter.get_scalar_type_name(python_type) or "String"
     return f"{base_type}{'!' if not nullable else ''}"
 
 
@@ -90,6 +66,7 @@ class SDLGenerator:
         """
         self.entities = entities
         self._entity_names = {e.__name__ for e in entities}
+        self._converter = TypeConverter(self._entity_names)
 
     def generate(self) -> str:
         """Generate complete GraphQL SDL string."""
@@ -157,45 +134,36 @@ class SDLGenerator:
     def _field_info_to_graphql(self, field_info: Any) -> str:
         """Convert Pydantic FieldInfo to GraphQL type."""
         annotation = field_info.annotation
-        return _python_type_to_graphql(annotation, self.entities)
+        return _python_type_to_graphql(annotation, self._converter)
 
     def _type_hint_to_graphql(self, hint: Any) -> str | None:
         """Convert type hint to GraphQL type if it's an entity reference."""
-        origin = get_origin(hint)
+        # Unwrap Mapped wrapper if present
+        if self._converter.is_mapped_wrapper(hint):
+            hint = self._converter.unwrap_mapped(hint)
 
-        # Handle SQLAlchemy Mapped wrapper (used by SQLModel Relationship)
-        # Mapped[T] -> extract T and process recursively
-        if origin is not None:
-            origin_name = getattr(origin, "__name__", "") or getattr(origin, "_name", "")
-            if origin_name == "Mapped" or str(origin).endswith("Mapped"):
-                args = get_args(hint)
-                if args:
-                    return self._type_hint_to_graphql(args[0])
+        origin = get_origin(hint)
 
         # Handle list of entities
         if origin is list:
-            args = get_args(hint)
-            if args:
-                inner = args[0]
-                # Handle Optional inside list (e.g., list[Optional[User]])
-                if _is_optional(inner):
-                    inner = _unwrap_optional(inner)
-                if isinstance(inner, str):
-                    # Forward reference
-                    return f"[{inner}!]!"
-                if isinstance(inner, type) and inner.__name__ in self._entity_names:
-                    return f"[{inner.__name__}!]!"
+            inner = self._converter.get_list_inner_type(hint)
+            entity_name = self._converter.get_entity_name(inner)
+            if entity_name:
+                return f"[{entity_name}!]!"
             return None
 
         # Handle Optional entity (e.g., Optional[User])
-        if _is_optional(hint):
-            inner = _unwrap_optional(hint)
-            if isinstance(inner, type) and inner.__name__ in self._entity_names:
-                return f"{inner.__name__}"
+        if self._converter.is_optional(hint):
+            inner = self._converter.unwrap_optional(hint)
+            entity_name = self._converter.get_entity_name(inner)
+            if entity_name:
+                return entity_name  # Optional, no !
+            return None
 
         # Handle single entity
-        if isinstance(hint, type) and hint.__name__ in self._entity_names:
-            return f"{hint.__name__}!"
+        entity_name = self._converter.get_entity_name(hint)
+        if entity_name:
+            return f"{entity_name}!"
 
         return None
 
@@ -263,7 +231,7 @@ class SDLGenerator:
                 continue
 
             if param_name in hints:
-                gql_type = _python_type_to_graphql(hints[param_name], self.entities)
+                gql_type = _python_type_to_graphql(hints[param_name], self._converter)
                 # Parameters are nullable by default if they have defaults
                 if param.default != inspect.Parameter.empty:
                     # Remove the ! for optional parameters
@@ -275,7 +243,7 @@ class SDLGenerator:
         # Get return type
         return_type = hints.get("return", inspect.Signature.empty)
         if return_type != inspect.Signature.empty:
-            return_gql_type = _python_type_to_graphql(return_type, self.entities)
+            return_gql_type = _python_type_to_graphql(return_type, self._converter)
         else:
             return_gql_type = "String!"
 
