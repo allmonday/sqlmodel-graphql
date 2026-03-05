@@ -217,6 +217,45 @@ class TestQueryMetaIntegration:
             for post in user.posts:
                 assert post.title is not None
 
+    @pytest.mark.asyncio
+    async def test_user_posts_relationship_query(self, session, sample_data) -> None:
+        """验证 user -> posts 关系查询可以工作"""
+        # 1. 解析 GraphQL 查询
+        parser = QueryParser(entity_field_names={"id", "name", "email", "posts"})
+        query = """
+        query {
+            users {
+                id
+                name
+                posts {
+                    id
+                    title
+                }
+            }
+        }
+        """
+        query_meta = parser.parse(query)["users"]
+
+        # 2. 使用 to_options 构建查询
+        stmt = select(User).options(*query_meta.to_options(User))
+
+        # 3. 执行查询
+        result = await session.exec(stmt)
+        users = result.all()
+
+        # 4. 验证结果
+        assert len(users) == 2
+
+        # 验证 Alice 有 2 个 posts
+        alice = next(u for u in users if u.name == "Alice")
+        assert len(alice.posts) == 2
+        for post in alice.posts:
+            assert post.title is not None
+
+        # 验证 Bob 有 1 个 post
+        bob = next(u for u in users if u.name == "Bob")
+        assert len(bob.posts) == 1
+
 
 class TestFieldSelectionInResponse:
     """Test that only requested fields are returned in the response."""
