@@ -15,24 +15,30 @@ if TYPE_CHECKING:
     from sqlmodel import SQLModel
 
 
-def _serialize_value(value: Any) -> Any:
+def _serialize_value(value: Any, include: set[str] | None = None) -> Any:
     """Serialize a value for JSON response.
 
     Handles SQLModel instances, lists, and basic types.
+
+    Args:
+        value: The value to serialize.
+        include: Optional set of field names to include. If None, all fields are included.
     """
     if value is None:
         return None
 
     # Handle SQLModel instances
     if hasattr(value, "model_dump"):
-        return value.model_dump()
+        return value.model_dump(include=include)
 
     # Handle lists
     if isinstance(value, list):
-        return [_serialize_value(item) for item in value]
+        return [_serialize_value(item, include) for item in value]
 
     # Handle dicts
     if isinstance(value, dict):
+        if include:
+            return {k: _serialize_value(v) for k, v in value.items() if k in include}
         return {k: _serialize_value(v) for k, v in value.items()}
 
     # Basic types (int, str, bool, float)
@@ -234,8 +240,16 @@ class GraphQLHandler:
                             if inspect.isawaitable(result):
                                 result = await result
 
-                            # Serialize the result
-                            data[field_name] = _serialize_value(result)
+                            # Extract requested fields from selection set
+                            requested_fields: set[str] | None = None
+                            if selection.selection_set:
+                                requested_fields = set()
+                                for field in selection.selection_set.selections:
+                                    if hasattr(field, "name"):
+                                        requested_fields.add(field.name.value)
+
+                            # Serialize the result, only including requested fields
+                            data[field_name] = _serialize_value(result, include=requested_fields)
 
                         except Exception as e:
                             errors.append(
