@@ -147,16 +147,39 @@ class IntrospectionGenerator:
         """Check if a type hint represents a relationship to another entity."""
         origin = get_origin(hint)
 
+        # Handle SQLAlchemy Mapped wrapper (used by SQLModel Relationship)
+        if origin is not None:
+            origin_name = getattr(origin, "__name__", "") or getattr(origin, "_name", "")
+            if origin_name == "Mapped" or str(origin).endswith("Mapped"):
+                args = get_args(hint)
+                if args:
+                    return self._is_entity_relationship(args[0])
+
         # Handle list of entities
         if origin is list:
             args = get_args(hint)
             if args:
                 inner = args[0]
+                # Handle Optional inside list
+                inner_origin = get_origin(inner)
+                if inner_origin is Union:
+                    inner_args = get_args(inner)
+                    non_none = [a for a in inner_args if a is not type(None)]
+                    if non_none:
+                        inner = non_none[0]
                 if isinstance(inner, str):
                     # Forward reference
                     return inner in self._entity_names
                 if isinstance(inner, type) and inner.__name__ in self._entity_names:
                     return True
+            return False
+
+        # Handle Optional entity (Union with None)
+        if origin is Union:
+            args = get_args(hint)
+            non_none = [a for a in args if a is not type(None)]
+            if non_none:
+                return self._is_entity_relationship(non_none[0])
             return False
 
         # Handle single entity
@@ -275,6 +298,14 @@ class IntrospectionGenerator:
             return {"kind": "SCALAR", "name": "String", "ofType": None}
 
         origin = get_origin(python_type)
+
+        # Handle SQLAlchemy Mapped wrapper (used by SQLModel Relationship)
+        if origin is not None:
+            origin_name = getattr(origin, "__name__", "") or getattr(origin, "_name", "")
+            if origin_name == "Mapped" or str(origin).endswith("Mapped"):
+                args = get_args(python_type)
+                if args:
+                    return self._build_type_ref(args[0], is_input, required)
 
         # Optional[T] -> required=False
         if origin is Union:
