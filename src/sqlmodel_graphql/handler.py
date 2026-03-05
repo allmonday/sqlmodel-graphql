@@ -15,14 +15,21 @@ if TYPE_CHECKING:
     from sqlmodel import SQLModel
 
 
-def _serialize_value(value: Any, include: set[str] | None = None) -> Any:
+def _serialize_value(
+    value: Any,
+    include: set[str] | dict[str, Any] | None = None
+) -> Any:
     """Serialize a value for JSON response.
 
     Handles SQLModel instances, lists, and basic types.
 
     Args:
         value: The value to serialize.
-        include: Optional set of field names to include. If None, all fields are included.
+        include: Can be:
+            - None: Include all fields
+            - set[str]: Include only these field names (no nested selection)
+            - dict[str, Any]: Field selection tree where keys are field names
+                             and values are nested selection trees for relationships
     """
     if value is None:
         return None
@@ -32,17 +39,36 @@ def _serialize_value(value: Any, include: set[str] | None = None) -> Any:
         # Get base fields from model_dump
         result = value.model_dump()
 
-        # If include is specified, filter fields
-        if include:
+        # Determine field selection
+        if include is None:
+            # Include all fields (including relationships)
+            for field_name in dir(value):
+                if not field_name.startswith('_') and field_name not in result:
+                    field_value = getattr(value, field_name, None)
+                    if field_value is not None and (
+                        hasattr(field_value, "model_dump") or
+                        isinstance(field_value, list)
+                    ):
+                        result[field_name] = _serialize_value(field_value)
+        elif isinstance(include, dict):
+            # Dict-based selection with nested field info
+            # First, filter scalar fields
             result = {k: v for k, v in result.items() if k in include}
 
-        # Handle relationship fields that are not included in model_dump
-        # These need to be serialized separately
-        if include:
+            # Then handle relationship fields
+            for field_name, nested_include in include.items():
+                if field_name not in result and hasattr(value, field_name):
+                    field_value = getattr(value, field_name)
+                    if field_value is not None:
+                        result[field_name] = _serialize_value(field_value, nested_include)
+        else:
+            # Set-based selection (backward compatible)
+            result = {k: v for k, v in result.items() if k in include}
+
+            # Handle relationship fields
             for field_name in include:
                 if field_name not in result and hasattr(value, field_name):
                     field_value = getattr(value, field_name)
-                    # Check if it's a relationship (list or another SQLModel)
                     if field_value is not None:
                         result[field_name] = _serialize_value(field_value)
 
@@ -55,7 +81,10 @@ def _serialize_value(value: Any, include: set[str] | None = None) -> Any:
     # Handle dicts
     if isinstance(value, dict):
         if include:
-            return {k: _serialize_value(v) for k, v in value.items() if k in include}
+            if isinstance(include, dict):
+                return {k: _serialize_value(v, include.get(k)) for k, v in value.items() if k in include}
+            else:
+                return {k: _serialize_value(v) for k, v in value.items() if k in include}
         return {k: _serialize_value(v) for k, v in value.items()}
 
     # Basic types (int, str, bool, float)
@@ -258,12 +287,7 @@ class GraphQLHandler:
                                 result = await result
 
                             # Extract requested fields from selection set
-                            requested_fields: set[str] | None = None
-                            if selection.selection_set:
-                                requested_fields = set()
-                                for field in selection.selection_set.selections:
-                                    if hasattr(field, "name"):
-                                        requested_fields.add(field.name.value)
+                            requested_fields = self._build_field_tree(selection)
 
                             # Serialize the result, only including requested fields
                             data[field_name] = _serialize_value(result, include=requested_fields)
@@ -280,6 +304,34 @@ class GraphQLHandler:
             response["errors"] = errors
 
         return response
+
+    def _build_field_tree(self, selection: Any) -> dict[str, Any] | None:
+        """Build a field selection tree from a GraphQL FieldNode.
+
+        Args:
+            selection: GraphQL FieldNode with selection set.
+
+        Returns:
+            Dictionary where keys are field names and values are:
+            - {} for scalar fields
+            - {nested_field: ...} for relationship fields
+            Returns None if no selection_set.
+        """
+        if not selection.selection_set:
+            return None
+
+        field_tree: dict[str, Any] = {}
+        for field in selection.selection_set.selections:
+            if hasattr(field, "name"):
+                field_name = field.name.value
+                if hasattr(field, "selection_set") and field.selection_set:
+                    # It's a relationship field - recursively build nested tree
+                    field_tree[field_name] = self._build_field_tree(field)
+                else:
+                    # It's a scalar field
+                    field_tree[field_name] = None
+
+        return field_tree
 
     def _build_arguments(
         self,
