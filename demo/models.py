@@ -7,7 +7,13 @@ from sqlmodel import Field, Relationship, SQLModel, select
 from sqlmodel_graphql import mutation, query, QueryMeta
 
 
-class User(SQLModel, table=True):
+class BaseEntity(SQLModel):
+    """Base class for all demo entities."""
+
+    pass
+
+
+class User(BaseEntity, table=True):
     """User entity."""
 
     id: Optional[int] = Field(default=None, primary_key=True)
@@ -59,7 +65,7 @@ class User(SQLModel, table=True):
             return user
 
 
-class Post(SQLModel, table=True):
+class Post(BaseEntity, table=True):
     """Post entity."""
 
     id: Optional[int] = Field(default=None, primary_key=True)
@@ -126,7 +132,7 @@ class Post(SQLModel, table=True):
             return post
 
 
-class Comment(SQLModel, table=True):
+class Comment(BaseEntity, table=True):
     """Comment entity."""
 
     id: Optional[int] = Field(default=None, primary_key=True)

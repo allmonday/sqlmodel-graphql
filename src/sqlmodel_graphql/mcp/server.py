@@ -22,7 +22,7 @@ if TYPE_CHECKING:
 
 
 def create_mcp_server(
-    entities: list[type[SQLModel]],
+    base: type[SQLModel],
     name: str = "SQLModel GraphQL API",
 ) -> "FastMCP":
     """Create an MCP server that exposes GraphQL operations as tools.
@@ -33,7 +33,8 @@ def create_mcp_server(
     - graphql_mutation: Execute dynamic GraphQL mutations
 
     Args:
-        entities: List of SQLModel entity classes with @query/@mutation decorators.
+        base: SQLModel base class. All subclasses with @query/@mutation
+              decorators will be automatically discovered.
         name: Name of the MCP server (shown in MCP clients).
 
     Returns:
@@ -41,11 +42,11 @@ def create_mcp_server(
 
     Example:
         ```python
-        from myapp.models import User, Post, Comment
+        from myapp.models import BaseEntity
         from sqlmodel_graphql.mcp import create_mcp_server
 
         mcp = create_mcp_server(
-            entities=[User, Post, Comment],
+            base=BaseEntity,
             name="My Blog GraphQL API"
         )
 
@@ -59,7 +60,7 @@ def create_mcp_server(
     from mcp.server.fastmcp import FastMCP
 
     # Create the GraphQL handler
-    handler = GraphQLHandler(entities=entities)
+    handler = GraphQLHandler(base=base)
 
     # Create the schema formatter
     formatter = SchemaFormatter(handler)

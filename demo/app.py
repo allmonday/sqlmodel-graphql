@@ -12,7 +12,7 @@ from pydantic import BaseModel
 from typing import Optional, Dict, Any
 
 from sqlmodel_graphql import GraphQLHandler
-from demo.models import User, Post, Comment
+from demo.models import BaseEntity
 from demo.database import init_db
 
 # GraphiQL HTML (loaded via CDN)
@@ -182,7 +182,7 @@ class GraphQLRequest(BaseModel):
 
 
 # Create GraphQL handler
-handler = GraphQLHandler(entities=[User, Post, Comment])
+handler = GraphQLHandler(base=BaseEntity)
 
 
 @asynccontextmanager

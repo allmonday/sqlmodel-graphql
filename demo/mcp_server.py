@@ -17,7 +17,7 @@ project_root = Path(__file__).parent.parent
 if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
-from demo.models import Comment, Post, User
+from demo.models import BaseEntity
 from sqlmodel_graphql.mcp import create_mcp_server
 
 
@@ -43,7 +43,7 @@ def main() -> None:
     args = parser.parse_args()
 
     mcp = create_mcp_server(
-        entities=[User, Post, Comment],
+        base=BaseEntity,
         name="Demo Blog GraphQL MCP Server",
     )
 

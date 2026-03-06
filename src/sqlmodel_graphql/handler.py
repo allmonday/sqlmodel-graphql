@@ -111,7 +111,11 @@ class GraphQLHandler:
         from sqlmodel import SQLModel
         from sqlmodel_graphql import GraphQLHandler, query
 
-        class User(SQLModel, table=True):
+        # Define a base class for your entities
+        class BaseEntity(SQLModel):
+            pass
+
+        class User(BaseEntity, table=True):
             id: int
             name: str
 
@@ -119,19 +123,21 @@ class GraphQLHandler:
             async def get_all(cls) -> list['User']:
                 return await fetch_users()
 
-        handler = GraphQLHandler(entities=[User])
+        # Create handler with base class - auto-discovers all entities
+        handler = GraphQLHandler(base=BaseEntity)
         result = await handler.execute('{ users { id name } }')
         ```
     """
 
-    def __init__(self, entities: list[type[SQLModel]]):
+    def __init__(self, base: type[SQLModel]):
         """Initialize the GraphQL handler.
 
         Args:
-            entities: List of SQLModel classes with @query/@mutation decorators.
+            base: SQLModel base class. All subclasses with @query/@mutation
+                  decorators will be automatically discovered.
         """
-        self.entities = entities
-        self._sdl_generator = SDLGenerator(entities)
+        self.entities = self._discover_from_base(base)
+        self._sdl_generator = SDLGenerator(self.entities)
         self._query_parser = QueryParser()
 
         # Build method mappings: field_name -> (entity, method)
@@ -142,10 +148,29 @@ class GraphQLHandler:
 
         # Initialize introspection generator
         self._introspection_generator = IntrospectionGenerator(
-            entities=entities,
+            entities=self.entities,
             query_methods=self._query_methods,
             mutation_methods=self._mutation_methods,
         )
+
+    def _discover_from_base(self, base: type[SQLModel]) -> list[type[SQLModel]]:
+        """Scan subclasses of base for @query/@mutation decorators.
+
+        Args:
+            base: The base class to scan for subclasses.
+
+        Returns:
+            List of entity classes that have @query or @mutation decorators.
+        """
+        entities: list[type[SQLModel]] = []
+        for subclass in base.__subclasses__():
+            for name in dir(subclass):
+                attr = getattr(subclass, name, None)
+                # Check for decorators first (avoid bool check on SQLAlchemy objects)
+                if hasattr(attr, "_graphql_query") or hasattr(attr, "_graphql_mutation"):
+                    entities.append(subclass)
+                    break
+        return entities
 
     def _scan_methods(self) -> None:
         """Scan all entities for @query and @mutation methods."""
