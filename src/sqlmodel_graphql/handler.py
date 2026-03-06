@@ -43,8 +43,14 @@ def _serialize_value(
         # Determine field selection
         if include is None:
             # Include all fields (including relationships)
-            for field_name in dir(value):
-                if not field_name.startswith('_') and field_name not in result:
+            # Use type() to avoid Pydantic deprecation warning about instance attribute access
+            value_type = type(value)
+            # Skip Pydantic internal attributes that trigger deprecation warnings
+            skip_attrs = {'model_computed_fields', 'model_fields', 'model_fields_set'}
+            for field_name in dir(value_type):
+                if (not field_name.startswith('_') and
+                    field_name not in result and
+                    field_name not in skip_attrs):
                     try:
                         field_value = getattr(value, field_name, None)
                     except Exception:

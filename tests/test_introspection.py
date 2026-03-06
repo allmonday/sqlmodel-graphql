@@ -9,12 +9,17 @@ from sqlmodel_graphql import GraphQLHandler, query, mutation
 from sqlmodel_graphql.introspection import IntrospectionGenerator
 
 
+class IntrospectionBase(SQLModel):
+    """Base class for introspection test entities."""
+    pass
+
+
 class Status(Enum):
     ACTIVE = "ACTIVE"
     INACTIVE = "INACTIVE"
 
 
-class IntrospectionUser(SQLModel, table=True):
+class IntrospectionUser(IntrospectionBase, table=True):
     __tablename__ = "introspection_user"  # Unique table name to avoid conflicts
     id: int = Field(default=None, primary_key=True)
     name: str
@@ -39,7 +44,7 @@ class TestIntrospectionGenerator:
 
     @pytest.fixture
     def handler(self) -> GraphQLHandler:
-        return GraphQLHandler(entities=[IntrospectionUser])
+        return GraphQLHandler(base=IntrospectionBase)
 
     @pytest.fixture
     def generator(self, handler: GraphQLHandler) -> IntrospectionGenerator:
@@ -175,7 +180,7 @@ class TestIntrospectionIntegration:
 
     @pytest.fixture
     def handler(self) -> GraphQLHandler:
-        return GraphQLHandler(entities=[IntrospectionUser])
+        return GraphQLHandler(base=IntrospectionBase)
 
     @pytest.mark.asyncio
     async def test_introspection_query(self, handler: GraphQLHandler):

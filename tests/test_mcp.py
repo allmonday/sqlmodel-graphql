@@ -218,8 +218,11 @@ class TestSchemaFormatter:
         from sqlmodel_graphql.handler import GraphQLHandler
         from sqlmodel_graphql.mcp.builders.schema_formatter import SchemaFormatter
 
-        # Define test entities inline to avoid import issues
-        class TestUser(SQLModel, table=False):
+        # Define test base and entity
+        class TestBase(SQLModel):
+            pass
+
+        class TestUser(TestBase, table=False):
             """Test user entity."""
 
             id: int = Field(primary_key=True)
@@ -229,7 +232,7 @@ class TestSchemaFormatter:
             async def get_all(cls) -> list["TestUser"]:
                 return []
 
-        handler = GraphQLHandler(entities=[TestUser])
+        handler = GraphQLHandler(base=TestBase)
         formatter = SchemaFormatter(handler)
         info = formatter.get_schema_info()
 
@@ -255,7 +258,10 @@ class TestSchemaFormatter:
         from sqlmodel_graphql.handler import GraphQLHandler
         from sqlmodel_graphql.mcp.builders.schema_formatter import SchemaFormatter
 
-        class TestPost(SQLModel, table=False):
+        class TestBase(SQLModel):
+            pass
+
+        class TestPost(TestBase, table=False):
             id: int = Field(primary_key=True)
             title: str
             content: str
@@ -264,7 +270,7 @@ class TestSchemaFormatter:
             async def get_all(cls) -> list["TestPost"]:
                 return []
 
-        handler = GraphQLHandler(entities=[TestPost])
+        handler = GraphQLHandler(base=TestBase)
         formatter = SchemaFormatter(handler)
         info = formatter.get_schema_info()
 
@@ -288,7 +294,10 @@ class TestSchemaFormatter:
         from sqlmodel_graphql.handler import GraphQLHandler
         from sqlmodel_graphql.mcp.builders.schema_formatter import SchemaFormatter
 
-        class TestItem(SQLModel, table=False):
+        class TestBase(SQLModel):
+            pass
+
+        class TestItem(TestBase, table=False):
             id: int = Field(primary_key=True)
             name: str
 
@@ -296,7 +305,7 @@ class TestSchemaFormatter:
             async def get_by_id(cls, item_id: int) -> Optional["TestItem"]:
                 return None
 
-        handler = GraphQLHandler(entities=[TestItem])
+        handler = GraphQLHandler(base=TestBase)
         formatter = SchemaFormatter(handler)
         info = formatter.get_schema_info()
 
@@ -326,7 +335,10 @@ class TestMCPServerCreation:
         from sqlmodel_graphql import query
         from sqlmodel_graphql.mcp import create_mcp_server
 
-        class TestEntity(SQLModel, table=False):
+        class TestBase(SQLModel):
+            pass
+
+        class TestEntity(TestBase, table=False):
             id: int = Field(primary_key=True)
             name: str
 
@@ -335,7 +347,7 @@ class TestMCPServerCreation:
                 return []
 
         mcp = create_mcp_server(
-            entities=[TestEntity],
+            base=TestBase,
             name="Test API",
         )
 
