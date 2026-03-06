@@ -1,5 +1,10 @@
 # SQLModel GraphQL
 
+
+[![pypi](https://img.shields.io/pypi/v/sqlmodel-graphql.svg)](https://pypi.python.org/pypi/sqlmodel-graphql)
+[![PyPI Downloads](https://static.pepy.tech/badge/sqlmodel-graphql/month)](https://pepy.tech/projects/sqlmodel-graphql)
+![Python Versions](https://img.shields.io/pypi/pyversions/sqlmodel-graphql)
+
 GraphQL SDL generation and query optimization for SQLModel.
 
 ## Features
