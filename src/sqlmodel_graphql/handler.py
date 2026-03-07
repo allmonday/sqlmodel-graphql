@@ -10,6 +10,7 @@ from graphql import parse
 
 from sqlmodel_graphql.introspection import IntrospectionGenerator
 from sqlmodel_graphql.query_parser import QueryParser
+from sqlmodel_graphql.response_builder import serialize_with_model
 from sqlmodel_graphql.sdl_generator import SDLGenerator
 
 if TYPE_CHECKING:
@@ -340,8 +341,12 @@ class GraphQLHandler:
                             # Extract requested fields from selection set
                             requested_fields = self._build_field_tree(selection)
 
-                            # Serialize the result, only including requested fields
-                            data[field_name] = _serialize_value(result, include=requested_fields)
+                            # Serialize using dynamic Pydantic model (filters FK fields)
+                            data[field_name] = serialize_with_model(
+                                result,
+                                entity=entity,
+                                field_tree=requested_fields,
+                            )
 
                         except Exception as e:
                             errors.append(
