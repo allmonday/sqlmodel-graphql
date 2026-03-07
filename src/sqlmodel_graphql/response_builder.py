@@ -43,7 +43,7 @@ def build_response_model(
             fields[field_name] = (field_type, ...)
         else:
             # Relationship field - build nested model
-            relation_entity = _get_relation_entity(entity, field_name)
+            relation_entity = get_relation_entity(entity, field_name)
             if relation_entity is None:
                 # Fallback to Any if relation type cannot be determined
                 fields[field_name] = (Any, ...)
@@ -115,7 +115,7 @@ def _validate_and_dump(
         for field_name, nested_tree in field_tree.items():
             if nested_tree is not None:
                 # Get nested entity type
-                nested_entity = _get_relation_entity(value_type, field_name)
+                nested_entity = get_relation_entity(value_type, field_name)
                 if nested_entity:
                     nested_value = getattr(value, field_name, None)
                     if nested_value is not None:
@@ -133,12 +133,17 @@ def _validate_and_dump(
         return data
 
 
-def _get_relation_entity(entity: type, field_name: str) -> type | None:
+def get_relation_entity(
+    entity: type,
+    field_name: str,
+    all_subclasses: set[type] | None = None,
+) -> type | None:
     """Get the target entity type for a relationship field.
 
     Args:
         entity: SQLModel entity class.
         field_name: Name of the relationship field.
+        all_subclasses: Optional set of all SQLModel subclasses for resolving forward references.
 
     Returns:
         Target entity class or None if not found.
@@ -163,21 +168,43 @@ def _get_relation_entity(entity: type, field_name: str) -> type | None:
             if hasattr(entity, "__annotations__"):
                 annotation = entity.__annotations__.get(field_name)
                 if annotation:
-                    return _extract_entity_from_annotation(annotation)
+                    result = _extract_entity_from_annotation(annotation, all_subclasses)
+                    if result:
+                        return result
+
+                    # Handle forward reference strings (e.g., "HandlerTestBook")
+                    if isinstance(annotation, str) and all_subclasses:
+                        for subclass in all_subclasses:
+                            if subclass.__name__ == annotation:
+                                return subclass
 
     # Fallback: try to get from annotations
     if hasattr(entity, "__annotations__"):
         annotation = entity.__annotations__.get(field_name)
         if annotation:
-            return _extract_entity_from_annotation(annotation)
+            result = _extract_entity_from_annotation(annotation, all_subclasses)
+            if result:
+                return result
+            # Handle forward reference strings
+            if isinstance(annotation, str) and all_subclasses:
+                for subclass in all_subclasses:
+                    if subclass.__name__ == annotation:
+                        return subclass
 
     return None
 
 
-def _extract_entity_from_annotation(annotation: Any) -> type | None:
+def _extract_entity_from_annotation(
+    annotation: Any,
+    all_subclasses: set[type] | None = None,
+) -> type | None:
     """Extract entity class from type annotation.
 
-    Handles: Optional[Entity], list[Entity], List[Entity]
+    Handles: Optional[Entity], list[Entity], List[Entity], and string forward references.
+
+    Args:
+        annotation: Type annotation (can be string, ForwardRef, or actual type).
+        all_subclasses: Set of all SQLModel subclasses for resolving string forward references.
     """
     origin = get_origin(annotation)
 
@@ -190,13 +217,52 @@ def _extract_entity_from_annotation(annotation: Any) -> type | None:
             if isinstance(arg, type):
                 return arg
             # Handle nested generics like list[Entity]
-            nested = _extract_entity_from_annotation(arg)
+            nested = _extract_entity_from_annotation(arg, all_subclasses)
             if nested:
                 return nested
+            # Handle string forward references in generic args
+            # (e.g., list["HandlerTestBook"])
+            if isinstance(arg, str) and all_subclasses:
+                # Extract entity name from string like "HandlerTestBook"
+                # or "Optional[HandlerTestBook]"
+                entity_name = arg.strip("[]\"'").split("[")[-1].split("]")[0]
+                for subclass in all_subclasses:
+                    if subclass.__name__ == entity_name:
+                        return subclass
 
     # Direct type
     if isinstance(annotation, type):
         return annotation
+
+    # Handle string forward references (e.g., "HandlerTestBook", "list['HandlerTestBook']")
+    if isinstance(annotation, str) and all_subclasses:
+        # Extract entity name from string like "HandlerTestBook" or "list['HandlerTestBook']"
+        # Pattern 1: "EntityName"
+        if "[" not in annotation:
+            for subclass in all_subclasses:
+                if subclass.__name__ == annotation:
+                    return subclass
+        # Pattern 2: "list['EntityName']" or "list[EntityName]"
+        else:
+            # Extract the entity name from within quotes or brackets
+            import re
+
+            # Try quoted format first: list['EntityName']
+            match = re.search(r"'([^']+)'", annotation)
+            if match:
+                entity_name = match.group(1)
+            else:
+                # Try unquoted format: list[EntityName]
+                match = re.search(r"\[([^\]]+)\]", annotation)
+                if match:
+                    entity_name = match.group(1).strip("'\"")
+                else:
+                    entity_name = None
+
+            if entity_name:
+                for subclass in all_subclasses:
+                    if subclass.__name__ == entity_name:
+                        return subclass
 
     return None
 
@@ -238,7 +304,7 @@ def _build_scalar_model(entity: type, model_name: str) -> type[BaseModel]:
     fields = {}
 
     # Get relationship field names
-    rel_names = _get_relationship_names(entity)
+    rel_names = get_relationship_names(entity)
 
     # Get scalar fields from model_fields
     if hasattr(entity, "model_fields"):
@@ -252,7 +318,7 @@ def _build_scalar_model(entity: type, model_name: str) -> type[BaseModel]:
     return create_model(f"{entity.__name__}{model_name}", **fields)
 
 
-def _get_relationship_names(entity: type) -> set[str]:
+def get_relationship_names(entity: type) -> set[str]:
     """Get names of all relationship fields.
 
     Args:

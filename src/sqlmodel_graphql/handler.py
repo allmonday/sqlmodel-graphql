@@ -10,7 +10,11 @@ from graphql import parse
 
 from sqlmodel_graphql.introspection import IntrospectionGenerator
 from sqlmodel_graphql.query_parser import QueryParser
-from sqlmodel_graphql.response_builder import serialize_with_model
+from sqlmodel_graphql.response_builder import (
+    get_relation_entity,
+    get_relationship_names,
+    serialize_with_model,
+)
 from sqlmodel_graphql.sdl_generator import SDLGenerator
 
 if TYPE_CHECKING:
@@ -183,23 +187,49 @@ class GraphQLHandler:
         )
 
     def _discover_from_base(self, base: type[SQLModel]) -> list[type[SQLModel]]:
-        """Scan subclasses of base for @query/@mutation decorators.
+        """Discover entities starting from @query/@mutation classes.
+
+        Traverses relationships to include related entities even without decorators.
 
         Args:
             base: The base class to scan for subclasses.
 
         Returns:
-            List of entity classes that have @query or @mutation decorators.
+            List of entity classes including root entities (with decorators)
+            and all related entities through Relationship traversal.
         """
-        entities: list[type[SQLModel]] = []
-        for subclass in base.__subclasses__():
+        # Step 1: Collect all SQLModel subclasses (boundary constraint)
+        all_subclasses = set(base.__subclasses__())
+
+        # Step 2: Find root entities (with @query/@mutation decorators)
+        root_entities: set[type[SQLModel]] = set()
+        for subclass in all_subclasses:
             for name in dir(subclass):
                 attr = getattr(subclass, name, None)
                 # Check for decorators first (avoid bool check on SQLAlchemy objects)
                 if hasattr(attr, "_graphql_query") or hasattr(attr, "_graphql_mutation"):
-                    entities.append(subclass)
+                    root_entities.add(subclass)
                     break
-        return entities
+
+        # Step 3: BFS traversal to discover related entities
+        discovered: set[type[SQLModel]] = set()
+        queue = list(root_entities)
+
+        while queue:
+            current = queue.pop(0)
+            if current in discovered:
+                continue
+            discovered.add(current)
+
+            # Traverse all relationships of current entity
+            for rel_name in get_relationship_names(current):
+                target_entity = get_relation_entity(current, rel_name, all_subclasses)
+                if target_entity and target_entity not in discovered:
+                    # Only add entities within the base's subclass tree
+                    if target_entity in all_subclasses:
+                        queue.append(target_entity)
+
+        return list(discovered)
 
     def _scan_methods(self) -> None:
         """Scan all entities for @query and @mutation methods."""

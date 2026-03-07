@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import pytest
-from sqlmodel import Field, SQLModel
+from sqlmodel import Field, Relationship, SQLModel
 
 from sqlmodel_graphql import GraphQLHandler, QueryMeta, mutation, query
 
@@ -144,3 +144,74 @@ class TestGraphQLHandlerWithBase:
 
         assert "data" in result
         assert result["data"]["__schema"]["queryType"]["name"] == "Query"
+
+
+# ============================================================================
+# Tests for Relationship-based entity discovery
+# ============================================================================
+
+
+class HandlerTestAuthor(HandlerTestBase, table=False):
+    """Author with @query - root entity."""
+
+    id: int = Field(primary_key=True)
+    name: str
+    books: list[HandlerTestBook] = Relationship(back_populates="author")
+
+    @query(name="test_authors")
+    async def get_all(cls) -> list[HandlerTestAuthor]:
+        """Get all test authors."""
+        return []
+
+
+class HandlerTestBook(HandlerTestBase, table=False):
+    """Book WITHOUT @query/@mutation - discovered via Relationship."""
+
+    id: int = Field(primary_key=True)
+    title: str
+    author_id: int = Field(foreign_key="handler_test_author.id")
+    author: HandlerTestAuthor | None = Relationship(back_populates="books")
+
+
+class HandlerTestIsolated(HandlerTestBase, table=False):
+    """Isolated entity - no decorators AND no relationships - should NOT be discovered."""
+
+    id: int = Field(primary_key=True)
+    data: str
+
+
+class TestDiscoverFromBaseWithRelationships:
+    """Tests for _discover_from_base with Relationship traversal."""
+
+    def test_discovers_root_entities_with_decorators(self) -> None:
+        """Test that root entities with @query are discovered."""
+        handler = GraphQLHandler(base=HandlerTestBase)
+
+        entity_names = [e.__name__ for e in handler.entities]
+        # Root entity: has @query
+        assert "HandlerTestAuthor" in entity_names
+
+    def test_discovers_related_entities_without_decorators(self) -> None:
+        """Test that entities related via Relationship are discovered even without decorators."""
+        handler = GraphQLHandler(base=HandlerTestBase)
+
+        entity_names = [e.__name__ for e in handler.entities]
+        # Related entity: no decorators but connected via Relationship
+        assert "HandlerTestBook" in entity_names
+
+    def test_ignores_isolated_entities_without_decorators(self) -> None:
+        """Test that isolated entities without decorators are NOT discovered."""
+        handler = GraphQLHandler(base=HandlerTestBase)
+
+        entity_names = [e.__name__ for e in handler.entities]
+        # Isolated entity: no decorators and no relationships
+        assert "HandlerTestIsolated" not in entity_names
+
+    def test_sdl_includes_related_entity_types(self) -> None:
+        """Test that SDL generation includes related entity types."""
+        handler = GraphQLHandler(base=HandlerTestBase)
+        sdl = handler.get_sdl()
+
+        # SDL should include the related entity type
+        assert "type HandlerTestBook" in sdl
+        assert "type HandlerTestAuthor" in sdl
