@@ -30,6 +30,7 @@ Or with uv:
 
 ```bash
 uv add sqlmodel-graphql
+uv add sqlmodel-graphql[mcp]  # include mcp server
 ```
 
 ## Quick Start
@@ -41,18 +42,20 @@ from typing import Optional
 from sqlmodel import SQLModel, Field, Relationship, select
 from sqlmodel_graphql import query, mutation, QueryMeta
 
-class User(SQLModel, table=True):
+class BaseEntity(SQLModel):
+    """Base class for all entities."""
+    pass
+
+class User(BaseEntity, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     name: str
     email: str
     posts: list["Post"] = Relationship(back_populates="author")
 
     @query(name='users')
-    async def get_all(cls, limit: int = 10, query_meta: Optional[QueryMeta] = None) -> list['User']:
+    async def get_all(cls, limit: int = 10, query_meta: QueryMeta | None = None) -> list['User']:
         """Get all users with optional query optimization."""
-        from demo.database import async_session
-
-        async with async_session() as session:
+        async with get_session() as session:
             stmt = select(cls).limit(limit)
             if query_meta:
                 # Apply optimization: only load requested fields and relationships
@@ -61,28 +64,46 @@ class User(SQLModel, table=True):
             return list(result.all())
 
     @query(name='user')
-    async def get_by_id(cls, id: int, query_meta: Optional[QueryMeta] = None) -> Optional['User']:
-        return await fetch_user(id, query_meta)
+    async def get_by_id(cls, id: int, query_meta: QueryMeta | None = None) -> Optional['User']:
+        async with get_session() as session:
+            stmt = select(cls).where(cls.id == id)
+            if query_meta:
+                stmt = stmt.options(*query_meta.to_options(cls))
+            result = await session.exec(stmt)
+            return result.first()
 
     @mutation(name='createUser')
-    async def create(cls, name: str, email: str) -> 'User':
-        return await create_user(name, email)
+    async def create(cls, name: str, email: str, query_meta: QueryMeta) -> 'User':
+        """Create a new user. query_meta is injected for relationship loading."""
+        async with get_session() as session:
+            user = cls(name=name, email=email)
+            session.add(user)
+            await session.commit()
+            await session.refresh(user)
+            # Re-query with query_meta to load relationships if requested
+            stmt = select(cls).where(cls.id == user.id)
+            stmt = stmt.options(*query_meta.to_options(cls))
+            result = await session.exec(stmt)
+            return result.first()
 
-class Post(SQLModel, table=True):
+class Post(BaseEntity, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     title: str
     content: str = ""
     author_id: int = Field(foreign_key="user.id")
-    author: User = Relationship(back_populates="posts")
+    author: Optional[User] = Relationship(back_populates="posts")
 ```
 
-### 2. Generate GraphQL SDL
+### 2. Create Handler (Auto-generates SDL)
 
 ```python
-from sqlmodel_graphql import SDLGenerator
+from sqlmodel_graphql import GraphQLHandler
 
-generator = SDLGenerator([User, Post])
-sdl = generator.generate()
+# Create handler - SDL is auto-generated from your models
+handler = GraphQLHandler(base=BaseEntity)
+
+# Get the SDL if needed
+sdl = handler.get_sdl()
 print(sdl)
 ```
 
@@ -119,7 +140,8 @@ type Mutation {
 ```python
 from sqlmodel_graphql import GraphQLHandler
 
-handler = GraphQLHandler(entities=[User, Post])
+# Create handler with base class - auto-discovers all entities
+handler = GraphQLHandler(base=BaseEntity)
 
 # Execute a GraphQL query
 result = await handler.execute("""
@@ -129,11 +151,8 @@ result = await handler.execute("""
     name
     posts {
       title
-      comments {
-        content
-        author {
-          name
-        }
+      author {
+        name
       }
     }
   }
@@ -148,12 +167,8 @@ result = await handler.execute("""
 #         "id": 1,
 #         "name": "Alice",
 #         "posts": [
-#           {
-#             "title": "Hello World",
-#             "comments": [
-#               {"content": "Great post!", "author": {"name": "Bob"}}
-#             ]
-#           }
+#           {"title": "Hello World", "author": {"name": "Alice"}},
+#           {"title": "GraphQL Tips", "author": {"name": "Alice"}}
 #         ]
 #       }
 #     ]
@@ -225,10 +240,7 @@ With MCP, AI can:
 
 ```bash
 # Core library
-pip install sqlmodel-graphql
-
-# MCP support (optional)
-pip install mcp
+pip install sqlmodel-graphql[mcp]
 ```
 
 ### Running MCP Server
@@ -285,13 +297,25 @@ async def get_all(cls, limit: int = 10, query_meta: Optional[QueryMeta] = None) 
 
 ### `@mutation(name=None, description=None)`
 
-Mark a method as a GraphQL mutation.
+Mark a method as a GraphQL mutation. If the mutation returns an entity type, `query_meta` is automatically injected.
 
 ```python
 @mutation(name='createUser')
-async def create(cls, name: str, email: str) -> 'User':
-    ...
+async def create(cls, name: str, email: str, query_meta: QueryMeta) -> 'User':
+    """Create a new user."""
+    async with get_session() as session:
+        user = cls(name=name, email=email)
+        session.add(user)
+        await session.commit()
+        await session.refresh(user)
+        # Re-query with query_meta to load relationships
+        stmt = select(cls).where(cls.id == user.id)
+        stmt = stmt.options(*query_meta.to_options(cls))
+        result = await session.exec(stmt)
+        return result.first()
 ```
+
+**Note:** `query_meta` is only injected when the return type is an entity. For scalar returns (e.g., `bool`, `str`), it is not passed.
 
 ### `SDLGenerator(entities)`
 
@@ -302,21 +326,18 @@ generator = SDLGenerator([User, Post])
 sdl = generator.generate()
 ```
 
-### `GraphQLHandler(entities=None, base=None)`
-
-Execute GraphQL queries against SQLModel entities with auto-discovery support.
+### `GraphQLHandler(base)`
+Execute GraphQL queries against SQLModel entities with auto-discovery.
 
 ```python
-# Auto-discover from SQLModel (default)
-handler = GraphQLHandler()
+# Recommended: Use base class for auto-discovery
+handler = GraphQLHandler(base=BaseEntity)
 
-# Use custom base class
-handler = GraphQLHandler(base=MyBase)
-
-# Explicit entities
-handler = GraphQLHandler(entities=[User, Post])
-
+# Execute queries
 result = await handler.execute("{ users { id name } }")
+
+# Get SDL
+sdl = handler.get_sdl()
 ```
 
 **Auto-Discovery Features:**
