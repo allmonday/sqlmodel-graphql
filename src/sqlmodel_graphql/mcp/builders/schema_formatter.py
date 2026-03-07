@@ -100,6 +100,7 @@ class SchemaFormatter:
                     "name": arg.get("name"),
                     "type": self._simplify_type_ref(arg.get("type")),
                     "required": self._is_required(arg.get("type")),
+                    "default_value": arg.get("defaultValue"),
                 }
                 for arg in field.get("args", [])
             ],
@@ -126,6 +127,7 @@ class SchemaFormatter:
                 "name": field.get("name"),
                 "type": self._simplify_type_ref(field.get("type")),
                 "required": self._is_required(field.get("type")),
+                "description": field.get("description"),
             }
 
             if self._is_relationship_type(field.get("type")):
@@ -135,6 +137,7 @@ class SchemaFormatter:
 
         return {
             "name": type_info.get("name"),
+            "description": type_info.get("description"),
             "scalar_fields": scalar_fields,
             "relationship_fields": relationship_fields,
         }

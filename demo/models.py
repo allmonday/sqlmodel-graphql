@@ -124,7 +124,7 @@ class Post(BaseEntity, table=True):
             result = await session.exec(stmt)
             return list(result.all())
 
-    @mutation(name="create_post", description="Create a new post")
+    @mutation(name="create_post")
     async def create(cls, title: str, content: str, author_id: int) -> "Post":
         """Create a new post (idempotent)."""
         from demo.database import async_session

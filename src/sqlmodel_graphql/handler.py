@@ -145,12 +145,19 @@ class GraphQLHandler:
         ```
     """
 
-    def __init__(self, base: type[SQLModel]):
+    def __init__(
+        self,
+        base: type[SQLModel],
+        query_description: str | None = None,
+        mutation_description: str | None = None,
+    ):
         """Initialize the GraphQL handler.
 
         Args:
             base: SQLModel base class. All subclasses with @query/@mutation
                   decorators will be automatically discovered.
+            query_description: Optional custom description for Query type.
+            mutation_description: Optional custom description for Mutation type.
         """
         self.entities = self._discover_from_base(base)
         self._sdl_generator = SDLGenerator(self.entities)
@@ -167,6 +174,8 @@ class GraphQLHandler:
             entities=self.entities,
             query_methods=self._query_methods,
             mutation_methods=self._mutation_methods,
+            query_description=query_description,
+            mutation_description=mutation_description,
         )
 
     def _discover_from_base(self, base: type[SQLModel]) -> list[type[SQLModel]]:

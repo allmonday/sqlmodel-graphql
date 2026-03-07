@@ -23,6 +23,8 @@ if TYPE_CHECKING:
 def create_mcp_server(
     base: type[SQLModel],
     name: str = "SQLModel GraphQL API",
+    query_description: str | None = None,
+    mutation_description: str | None = None,
 ) -> FastMCP:
     """Create an MCP server that exposes GraphQL operations as tools.
 
@@ -35,6 +37,8 @@ def create_mcp_server(
         base: SQLModel base class. All subclasses with @query/@mutation
               decorators will be automatically discovered.
         name: Name of the MCP server (shown in MCP clients).
+        query_description: Optional custom description for Query type.
+        mutation_description: Optional custom description for Mutation type.
 
     Returns:
         A configured FastMCP server instance.
@@ -46,7 +50,9 @@ def create_mcp_server(
 
         mcp = create_mcp_server(
             base=BaseEntity,
-            name="My Blog GraphQL API"
+            name="My Blog GraphQL API",
+            query_description="查询用户、文章和评论的 API",
+            mutation_description="创建和更新数据的 API",
         )
 
         # Run with stdio transport (default)
@@ -59,7 +65,11 @@ def create_mcp_server(
     from mcp.server.fastmcp import FastMCP
 
     # Create the GraphQL handler
-    handler = GraphQLHandler(base=base)
+    handler = GraphQLHandler(
+        base=base,
+        query_description=query_description,
+        mutation_description=mutation_description,
+    )
 
     # Create the schema formatter
     formatter = SchemaFormatter(handler)

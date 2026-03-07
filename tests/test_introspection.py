@@ -270,3 +270,52 @@ class TestIntrospectionIntegration:
         assert "Status" in type_names
         assert "Query" in type_names
         assert "Mutation" in type_names
+
+
+class TestCustomDescriptions:
+    """Tests for custom Query/Mutation descriptions."""
+
+    def test_custom_query_description(self) -> None:
+        """Custom query description should be used."""
+        handler = GraphQLHandler(
+            base=IntrospectionBase,
+            query_description="自定义查询描述",
+        )
+        schema = handler._introspection_generator.generate()
+
+        query_type = next(
+            (t for t in schema["types"] if t["name"] == "Query"), None
+        )
+        assert query_type is not None
+        assert query_type["description"] == "自定义查询描述"
+
+    def test_custom_mutation_description(self) -> None:
+        """Custom mutation description should be used."""
+        handler = GraphQLHandler(
+            base=IntrospectionBase,
+            mutation_description="自定义变更描述",
+        )
+        schema = handler._introspection_generator.generate()
+
+        mutation_type = next(
+            (t for t in schema["types"] if t["name"] == "Mutation"), None
+        )
+        assert mutation_type is not None
+        assert mutation_type["description"] == "自定义变更描述"
+
+    def test_default_description_is_none(self) -> None:
+        """Default description should be None when not provided."""
+        handler = GraphQLHandler(base=IntrospectionBase)
+        schema = handler._introspection_generator.generate()
+
+        query_type = next(
+            (t for t in schema["types"] if t["name"] == "Query"), None
+        )
+        mutation_type = next(
+            (t for t in schema["types"] if t["name"] == "Mutation"), None
+        )
+
+        assert query_type is not None
+        assert query_type["description"] is None
+        assert mutation_type is not None
+        assert mutation_type["description"] is None

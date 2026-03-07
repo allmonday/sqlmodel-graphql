@@ -25,6 +25,8 @@ class IntrospectionGenerator:
         entities: list[type[SQLModel]],
         query_methods: dict[str, tuple[type[SQLModel], Callable]],
         mutation_methods: dict[str, tuple[type[SQLModel], Callable]],
+        query_description: str | None = None,
+        mutation_description: str | None = None,
     ):
         """Initialize the introspection generator.
 
@@ -32,11 +34,15 @@ class IntrospectionGenerator:
             entities: List of SQLModel classes.
             query_methods: Mapping of field name to (entity, method) for queries.
             mutation_methods: Mapping of field name to (entity, method) for mutations.
+            query_description: Optional custom description for Query type.
+            mutation_description: Optional custom description for Mutation type.
         """
         self.entities = entities
         self._entity_names = {e.__name__ for e in entities}
         self._query_methods = query_methods
         self._mutation_methods = mutation_methods
+        self._query_description = query_description
+        self._mutation_description = mutation_description
         # Initialize converter before _collect_enum_types which uses it
         self._converter = TypeConverter(self._entity_names)
         self._enum_types = self._collect_enum_types()
@@ -124,7 +130,9 @@ class IntrospectionGenerator:
 
         # Get scalar fields from model_fields
         for field_name, field_info in entity.model_fields.items():
-            field = self._build_field(field_name, field_info.annotation)
+            # 提取 Field(description="...") 中的描述
+            description = field_info.description
+            field = self._build_field(field_name, field_info.annotation, description)
             fields.append(field)
 
         # Get relationship fields from type hints (only entity references)
@@ -191,7 +199,7 @@ class IntrospectionGenerator:
         return {
             "kind": "OBJECT",
             "name": "Query",
-            "description": "The query root of this GraphQL API.",
+            "description": self._query_description,
             "fields": fields,
             "inputFields": None,
             "interfaces": [],
@@ -210,7 +218,7 @@ class IntrospectionGenerator:
         return {
             "kind": "OBJECT",
             "name": "Mutation",
-            "description": "The mutation root of this GraphQL API.",
+            "description": self._mutation_description,
             "fields": fields,
             "inputFields": None,
             "interfaces": [],
@@ -222,10 +230,12 @@ class IntrospectionGenerator:
         """Build introspection data for a query/mutation field."""
         func = method.__func__ if hasattr(method, "__func__") else method
 
-        # Get description from decorator
+        # Get description: 优先使用装饰器描述， 否则使用 docstring
         description = getattr(func, "_graphql_query_description", None) or getattr(
             func, "_graphql_mutation_description", None
         )
+        if not description and func.__doc__:
+            description = func.__doc__.strip()
 
         # Get type hints
         try:
@@ -247,8 +257,10 @@ class IntrospectionGenerator:
 
             type_hint = hints.get(param_name)
             required = param.default == inspect.Parameter.empty
+            # 提取参数默认值
+            default_value = None if required else repr(param.default)
             arg = self._build_input_value(
-                param_name, type_hint, default_value=None, required=required
+                param_name, type_hint, default_value=default_value, required=required
             )
             args.append(arg)
 
