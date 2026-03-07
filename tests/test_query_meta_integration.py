@@ -263,15 +263,15 @@ class TestFieldSelectionInResponse:
     @pytest.mark.asyncio
     async def test_single_entity_returns_only_requested_fields(self, session, sample_data) -> None:
         """Test that response only includes fields requested in the GraphQL query."""
+        from sqlmodel_graphql.response_builder import serialize_with_model
+
         # Query using the Post entity
         result_post = await session.exec(select(Post).where(Post.id == 1))
         post = result_post.first()
 
-        # Test _serialize_value directly with include parameter
-        from sqlmodel_graphql.handler import _serialize_value
-
-        # Request only title and content
-        serialized = _serialize_value(post, include={"title", "content"})
+        # Request only title and content (field_tree format: {field: None})
+        field_tree = {"title": None, "content": None}
+        serialized = serialize_with_model(post, entity=Post, field_tree=field_tree)
 
         # Should have requested fields
         assert "title" in serialized
@@ -284,13 +284,14 @@ class TestFieldSelectionInResponse:
     @pytest.mark.asyncio
     async def test_list_returns_only_requested_fields(self, session, sample_data) -> None:
         """Test that list responses only include requested fields."""
-        from sqlmodel_graphql.handler import _serialize_value
+        from sqlmodel_graphql.response_builder import serialize_with_model
 
         result_posts = await session.exec(select(Post))
         posts = list(result_posts.all())
 
         # Request only title
-        serialized = _serialize_value(posts, include={"title"})
+        field_tree = {"title": None}
+        serialized = serialize_with_model(posts, entity=Post, field_tree=field_tree)
 
         assert len(serialized) == 3
         for post in serialized:
@@ -304,13 +305,14 @@ class TestFieldSelectionInResponse:
     @pytest.mark.asyncio
     async def test_all_fields_requested(self, session, sample_data) -> None:
         """Test that when all fields are requested, all are returned."""
-        from sqlmodel_graphql.handler import _serialize_value
+        from sqlmodel_graphql.response_builder import serialize_with_model
 
         result_post = await session.exec(select(Post).where(Post.id == 1))
         post = result_post.first()
 
         # Request all fields
-        serialized = _serialize_value(post, include={"id", "title", "content", "author_id"})
+        field_tree = {"id": None, "title": None, "content": None, "author_id": None}
+        serialized = serialize_with_model(post, entity=Post, field_tree=field_tree)
 
         # All fields should be present
         assert "id" in serialized
@@ -320,16 +322,16 @@ class TestFieldSelectionInResponse:
 
     @pytest.mark.asyncio
     async def test_no_include_returns_all_fields(self, session, sample_data) -> None:
-        """Test that when include is None, all fields are returned."""
-        from sqlmodel_graphql.handler import _serialize_value
+        """Test that when field_tree is None, all scalar fields are returned."""
+        from sqlmodel_graphql.response_builder import serialize_with_model
 
         result_post = await session.exec(select(Post).where(Post.id == 1))
         post = result_post.first()
 
-        # No include filter
-        serialized = _serialize_value(post, include=None)
+        # No field_tree filter (None means all scalar fields)
+        serialized = serialize_with_model(post, entity=Post, field_tree=None)
 
-        # All fields should be present
+        # All scalar fields should be present
         assert "id" in serialized
         assert "title" in serialized
         assert "content" in serialized

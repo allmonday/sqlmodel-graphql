@@ -11,6 +11,8 @@ from sqlmodel_graphql.mcp.builders.schema_formatter import SchemaFormatter
 class TestEntity(SQLModel):
     """Test entity with descriptions."""
 
+    __test__ = False  # Tell pytest this is not a test class
+
     id: int | None = Field(default=None, primary_key=True)
     name: str = Field(description="User's full name")
     email: str = Field(description="Unique email address")

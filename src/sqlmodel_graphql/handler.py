@@ -2,123 +2,16 @@
 
 from __future__ import annotations
 
-import inspect
-from collections import deque
-from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
-from graphql import parse
-
+from sqlmodel_graphql.discovery import EntityDiscovery
 from sqlmodel_graphql.introspection import IntrospectionGenerator
 from sqlmodel_graphql.query_parser import QueryParser
-from sqlmodel_graphql.response_builder import (
-    get_relation_entity,
-    get_relationship_names,
-    serialize_with_model,
-)
+from sqlmodel_graphql.scanning import MethodScanner
 from sqlmodel_graphql.sdl_generator import SDLGenerator
 
 if TYPE_CHECKING:
     from sqlmodel import SQLModel
-
-
-def _serialize_value(
-    value: Any,
-    include: set[str] | dict[str, Any] | None = None
-) -> Any:
-    """Serialize a value for JSON response.
-
-    Handles SQLModel instances, lists, and basic types.
-
-    Args:
-        value: The value to serialize.
-        include: Can be:
-            - None: Include all fields
-            - set[str]: Include only these field names (no nested selection)
-            - dict[str, Any]: Field selection tree where keys are field names
-                             and values are nested selection trees for relationships
-    """
-    if value is None:
-        return None
-
-    # Handle SQLModel instances
-    if hasattr(value, "model_dump"):
-        # Get base fields from model_dump
-        result = value.model_dump()
-
-        # Determine field selection
-        if include is None:
-            # Include all fields (including relationships)
-            # Use type() to avoid Pydantic deprecation warning about instance attribute access
-            value_type = type(value)
-            # Skip Pydantic internal attributes that trigger deprecation warnings
-            skip_attrs = {'model_computed_fields', 'model_fields', 'model_fields_set'}
-            for field_name in dir(value_type):
-                if (not field_name.startswith('_') and
-                    field_name not in result and
-                    field_name not in skip_attrs):
-                    try:
-                        field_value = getattr(value, field_name, None)
-                    except Exception:
-                        field_value = None
-                    if field_value is not None and (
-                        hasattr(field_value, "model_dump") or
-                        isinstance(field_value, list)
-                    ):
-                        result[field_name] = _serialize_value(field_value)
-        elif isinstance(include, dict):
-            # Dict-based selection with nested field info
-            # First, filter scalar fields
-            result = {k: v for k, v in result.items() if k in include}
-
-            # Then handle relationship fields
-            for field_name, nested_include in include.items():
-                if field_name not in result and hasattr(value, field_name):
-                    try:
-                        field_value = getattr(value, field_name)
-                    except Exception:
-                        field_value = None
-                    if field_value is not None:
-                        result[field_name] = _serialize_value(field_value, nested_include)
-        else:
-            # Set-based selection (backward compatible)
-            result = {k: v for k, v in result.items() if k in include}
-
-            # Handle relationship fields
-            for field_name in include:
-                if field_name not in result and hasattr(value, field_name):
-                    try:
-                        field_value = getattr(value, field_name)
-                    except Exception:
-                        field_value = None
-                    if field_value is not None:
-                        result[field_name] = _serialize_value(field_value)
-
-        return result
-
-    # Handle lists
-    if isinstance(value, list):
-        return [_serialize_value(item, include) for item in value]
-
-    # Handle dicts
-    if isinstance(value, dict):
-        if include:
-            if isinstance(include, dict):
-                return {
-                    k: _serialize_value(v, include.get(k))
-                    for k, v in value.items()
-                    if k in include
-                }
-            else:
-                return {
-                    k: _serialize_value(v)
-                    for k, v in value.items()
-                    if k in include
-                }
-        return {k: _serialize_value(v) for k, v in value.items()}
-
-    # Basic types (int, str, bool, float)
-    return value
 
 
 class GraphQLHandler:
@@ -164,19 +57,23 @@ class GraphQLHandler:
             query_description: Optional custom description for Query type.
             mutation_description: Optional custom description for Mutation type.
         """
-        self.entities = self._discover_from_base(base)
+        # Discover entities with decorators and their related entities
+        discovery = EntityDiscovery(base)
+        self.entities = discovery.discover()
+
+        # Initialize SDL generator
         self._sdl_generator = SDLGenerator(
             self.entities,
             query_description=query_description,
             mutation_description=mutation_description,
         )
+
+        # Parse queries for field selection optimization
         self._query_parser = QueryParser()
 
-        # Build method mappings: field_name -> (entity, method)
-        self._query_methods: dict[str, tuple[type[SQLModel], Callable[..., Any]]] = {}
-        self._mutation_methods: dict[str, tuple[type[SQLModel], Callable[..., Any]]] = {}
-
-        self._scan_methods()
+        # Scan for @query and @mutation methods
+        scanner = MethodScanner()
+        self._query_methods, self._mutation_methods = scanner.scan(self.entities)
 
         # Initialize introspection generator
         self._introspection_generator = IntrospectionGenerator(
@@ -186,79 +83,6 @@ class GraphQLHandler:
             query_description=query_description,
             mutation_description=mutation_description,
         )
-
-    def _discover_from_base(self, base: type[SQLModel]) -> list[type[SQLModel]]:
-        """Discover entities starting from @query/@mutation classes.
-
-        Traverses relationships to include related entities even without decorators.
-
-        Args:
-            base: The base class to scan for subclasses.
-
-        Returns:
-            List of entity classes including root entities (with decorators)
-            and all related entities through Relationship traversal.
-        """
-        # Step 1: Collect all SQLModel subclasses (boundary constraint)
-        all_subclasses = set(base.__subclasses__())
-
-        # Step 2: Find root entities (with @query/@mutation decorators)
-        root_entities: set[type[SQLModel]] = set()
-        for subclass in all_subclasses:
-            for name in dir(subclass):
-                attr = getattr(subclass, name, None)
-                # Check for decorators first (avoid bool check on SQLAlchemy objects)
-                if hasattr(attr, "_graphql_query") or hasattr(attr, "_graphql_mutation"):
-                    root_entities.add(subclass)
-                    break
-
-        # Step 3: BFS traversal to discover related entities
-        discovered: set[type[SQLModel]] = set()
-        queue: deque[type[SQLModel]] = deque(root_entities)
-
-        while queue:
-            current = queue.popleft()
-            if current in discovered:
-                continue
-            discovered.add(current)
-
-            # Traverse all relationships of current entity
-            for rel_name in get_relationship_names(current):
-                target_entity = get_relation_entity(current, rel_name, all_subclasses)
-                if target_entity and target_entity not in discovered:
-                    # Only add entities within the base's subclass tree
-                    if target_entity in all_subclasses:
-                        queue.append(target_entity)
-
-        return list(discovered)
-
-    def _scan_methods(self) -> None:
-        """Scan all entities for @query and @mutation methods."""
-        for entity in self.entities:
-            for name in dir(entity):
-                try:
-                    attr = getattr(entity, name)
-                    if not callable(attr):
-                        continue
-
-                    # Check for @query decorator
-                    if hasattr(attr, "_graphql_query"):
-                        func = attr.__func__ if hasattr(attr, "__func__") else attr
-                        gql_name = getattr(func, "_graphql_query_name", None)
-                        if gql_name is None:
-                            gql_name = func.__name__
-                        self._query_methods[gql_name] = (entity, attr)
-
-                    # Check for @mutation decorator
-                    if hasattr(attr, "_graphql_mutation"):
-                        func = attr.__func__ if hasattr(attr, "__func__") else attr
-                        gql_name = getattr(func, "_graphql_mutation_name", None)
-                        if gql_name is None:
-                            gql_name = func.__name__
-                        self._mutation_methods[gql_name] = (entity, attr)
-
-                except Exception:
-                    continue
 
     def get_sdl(self) -> str:
         """Get the GraphQL Schema Definition Language string.
@@ -287,13 +111,15 @@ class GraphQLHandler:
         try:
             # Check if this is an introspection query
             if self._is_introspection_query(query):
-                return await self._execute_introspection(query, variables)
+                return self._execute_introspection(query, variables)
 
             # Parse the query to get field selection info
             parsed = self._query_parser.parse(query)
 
             # Execute regular query
-            return await self._execute_query(query, variables, operation_name, parsed)
+            return await self._execute_query(
+                query, variables, operation_name, parsed
+            )
 
         except Exception as e:
             return {"errors": [{"message": str(e)}]}
@@ -302,7 +128,7 @@ class GraphQLHandler:
         """Check if the query is an introspection query."""
         return "__schema" in query or "__type" in query
 
-    async def _execute_introspection(
+    def _execute_introspection(
         self, query: str, variables: dict[str, Any] | None
     ) -> dict[str, Any]:
         """Execute an introspection query.
@@ -334,11 +160,19 @@ class GraphQLHandler:
         Returns:
             Query result dictionary.
         """
-        from graphql import FieldNode, OperationDefinitionNode
+        import inspect
+
+        from graphql import FieldNode, OperationDefinitionNode, parse
+
+        from sqlmodel_graphql.execution import ArgumentBuilder, FieldTreeBuilder
+        from sqlmodel_graphql.response_builder import serialize_with_model
 
         document = parse(query)
         data: dict[str, Any] = {}
         errors: list[dict[str, Any]] = []
+
+        argument_builder = ArgumentBuilder()
+        field_tree_builder = FieldTreeBuilder()
 
         for definition in document.definitions:
             if isinstance(definition, OperationDefinitionNode):
@@ -369,7 +203,7 @@ class GraphQLHandler:
                             entity, method = method_info
 
                             # Build arguments
-                            args = self._build_arguments(
+                            args = argument_builder.build_arguments(
                                 selection, variables, method, entity
                             )
 
@@ -383,7 +217,9 @@ class GraphQLHandler:
                                 result = await result
 
                             # Extract requested fields from selection set
-                            requested_fields = self._build_field_tree(selection)
+                            requested_fields = field_tree_builder.build_field_tree(
+                                selection
+                            )
 
                             # Serialize using dynamic Pydantic model (filters FK fields)
                             data[field_name] = serialize_with_model(
@@ -404,84 +240,3 @@ class GraphQLHandler:
             response["errors"] = errors
 
         return response
-
-    def _build_field_tree(self, selection: Any) -> dict[str, Any] | None:
-        """Build a field selection tree from a GraphQL FieldNode.
-
-        Args:
-            selection: GraphQL FieldNode with selection set.
-
-        Returns:
-            Dictionary where keys are field names and values are:
-            - {} for scalar fields
-            - {nested_field: ...} for relationship fields
-            Returns None if no selection_set.
-        """
-        if not selection.selection_set:
-            return None
-
-        field_tree: dict[str, Any] = {}
-        for field in selection.selection_set.selections:
-            if hasattr(field, "name"):
-                field_name = field.name.value
-                if hasattr(field, "selection_set") and field.selection_set:
-                    # It's a relationship field - recursively build nested tree
-                    field_tree[field_name] = self._build_field_tree(field)
-                else:
-                    # It's a scalar field
-                    field_tree[field_name] = None
-
-        return field_tree
-
-    def _build_arguments(
-        self,
-        selection: Any,
-        variables: dict[str, Any] | None,
-        method: Callable[..., Any],
-        entity: type[SQLModel],
-    ) -> dict[str, Any]:
-        """Build method arguments from GraphQL field arguments.
-
-        Args:
-            selection: GraphQL FieldNode with argument info.
-            variables: GraphQL variables dict.
-            method: The method to call.
-            entity: The SQLModel entity class.
-
-        Returns:
-            Dictionary of argument name to value.
-        """
-        args: dict[str, Any] = {}
-        variables = variables or {}
-
-        if not selection.arguments:
-            return args
-
-        # Get method signature for type info
-        func = method.__func__ if hasattr(method, "__func__") else method
-        sig = inspect.signature(func)
-
-        for arg in selection.arguments:
-            arg_name = arg.name.value
-
-            # Get the value (from literal or variable)
-            if hasattr(arg.value, "value"):
-                # Literal value
-                value = arg.value.value
-            elif hasattr(arg.value, "name"):
-                # Variable reference
-                var_name = arg.value.name.value
-                value = variables.get(var_name)
-            else:
-                value = arg.value
-
-            # Use argument name directly
-            param_name = arg_name
-
-            # Check if this param exists in the method signature
-            if param_name in sig.parameters:
-                args[param_name] = value
-            elif arg_name in sig.parameters:
-                args[arg_name] = value
-
-        return args
