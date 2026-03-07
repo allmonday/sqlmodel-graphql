@@ -1100,12 +1100,10 @@ wheels = [
 
 [[package]]
 name = "sqlmodel-graphql"
-version = "0.1.0"
+version = "0.2.0"
 source = { editable = "." }
 dependencies = [
-    { name = "aiosqlite" },
     { name = "graphql-core" },
-    { name = "greenlet" },
     { name = "sqlmodel" },
 ]
 
@@ -1137,12 +1135,10 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "aiosqlite", specifier = ">=0.22.1" },
     { name = "aiosqlite", marker = "extra == 'demo'", specifier = ">=0.19.0" },
     { name = "aiosqlite", marker = "extra == 'dev'", specifier = ">=0.19.0" },
     { name = "fastapi", marker = "extra == 'demo'", specifier = ">=0.100.0" },
     { name = "graphql-core", specifier = ">=3.2.0" },
-    { name = "greenlet", specifier = ">=3.3.2" },
     { name = "mcp", marker = "extra == 'mcp'", specifier = ">=1.0.0" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.0.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.0.0" },

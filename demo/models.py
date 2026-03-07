@@ -53,7 +53,7 @@ class User(BaseEntity, table=True):
             return result.first()
 
     @mutation(name="create_user", description="Create a new user")
-    async def create(cls, name: str, email: str) -> "User":
+    async def create(cls, name: str, email: str, query_meta: QueryMeta) -> "User":
         """Create a new user (idempotent)."""
         from demo.database import async_session
 
@@ -61,13 +61,21 @@ class User(BaseEntity, table=True):
             # Idempotency check: return existing user if email already exists
             existing = await session.exec(select(cls).where(cls.email == email))
             if existing.first():
-                return existing.first()
+                stmt = select(cls).where(cls.id == existing.first().id)
+                stmt = stmt.options(*query_meta.to_options(cls))
+                result = await session.exec(stmt)
+                return result.first()
 
             user = cls(name=name, email=email)
             session.add(user)
             await session.commit()
             await session.refresh(user)
-            return user
+
+            # Re-query with query_meta to load relationships
+            stmt = select(cls).where(cls.id == user.id)
+            stmt = stmt.options(*query_meta.to_options(cls))
+            result = await session.exec(stmt)
+            return result.first()
 
 
 class Post(BaseEntity, table=True):
@@ -125,7 +133,9 @@ class Post(BaseEntity, table=True):
             return list(result.all())
 
     @mutation(name="create_post")
-    async def create(cls, title: str, content: str, author_id: int) -> "Post":
+    async def create(
+        cls, title: str, content: str, author_id: int, query_meta: QueryMeta
+    ) -> "Post":
         """Create a new post (idempotent)."""
         from demo.database import async_session
 
@@ -135,13 +145,21 @@ class Post(BaseEntity, table=True):
                 select(cls).where(cls.title == title, cls.author_id == author_id)
             )
             if existing.first():
-                return existing.first()
+                stmt = select(cls).where(cls.id == existing.first().id)
+                stmt = stmt.options(*query_meta.to_options(cls))
+                result = await session.exec(stmt)
+                return result.first()
 
             post = cls(title=title, content=content, author_id=author_id)
             session.add(post)
             await session.commit()
             await session.refresh(post)
-            return post
+
+            # Re-query with query_meta to load relationships
+            stmt = select(cls).where(cls.id == post.id)
+            stmt = stmt.options(*query_meta.to_options(cls))
+            result = await session.exec(stmt)
+            return result.first()
 
 
 class Comment(BaseEntity, table=True):
@@ -213,7 +231,9 @@ class Comment(BaseEntity, table=True):
             return list(result.all())
 
     @mutation(name="create_comment", description="Create a new comment")
-    async def create(cls, content: str, post_id: int, author_id: int) -> "Comment":
+    async def create(
+        cls, content: str, post_id: int, author_id: int, query_meta: QueryMeta
+    ) -> "Comment":
         """Create a new comment (idempotent)."""
         from demo.database import async_session
 
@@ -227,10 +247,18 @@ class Comment(BaseEntity, table=True):
                 )
             )
             if existing.first():
-                return existing.first()
+                stmt = select(cls).where(cls.id == existing.first().id)
+                stmt = stmt.options(*query_meta.to_options(cls))
+                result = await session.exec(stmt)
+                return result.first()
 
             comment = cls(content=content, post_id=post_id, author_id=author_id)
             session.add(comment)
             await session.commit()
             await session.refresh(comment)
-            return comment
+
+            # Re-query with query_meta to load relationships
+            stmt = select(cls).where(cls.id == comment.id)
+            stmt = stmt.options(*query_meta.to_options(cls))
+            result = await session.exec(stmt)
+            return result.first()

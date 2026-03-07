@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
-from typing import Any, get_args, get_origin
+from collections.abc import Callable
+from typing import Any, ParamSpec, get_args, get_origin, get_type_hints
+
+P = ParamSpec("P")
 
 
 def get_field_type(entity: type, field_name: str) -> type:
@@ -59,3 +62,42 @@ def unwrap_optional_type(annotation: type) -> type:
         if non_none_args:
             return non_none_args[0]
     return annotation
+
+
+def get_return_entity_type(method: Callable[P, Any], entities: list[type]) -> type | None:
+    """Get the return entity type if method returns an entity or list of entities.
+
+    Args:
+        method: The query/mutation method.
+        entities: List of all entity classes.
+
+    Returns:
+        The entity class if return type is an entity, otherwise None.
+    """
+    try:
+        func = method.__func__ if hasattr(method, "__func__") else method
+        hints = get_type_hints(func)
+        return_type = hints.get("return")
+        if return_type is None:
+            return None
+
+        # Unwrap list type
+        origin = get_origin(return_type)
+        if origin is list:
+            args = get_args(return_type)
+            if args:
+                return_type = args[0]
+
+        # Unwrap Optional
+        if is_optional_type(return_type):
+            return_type = unwrap_optional_type(return_type)
+
+        # Check if it's an entity
+        entity_names = {e.__name__ for e in entities}
+        if isinstance(return_type, type) and return_type.__name__ in entity_names:
+            return return_type
+
+    except Exception:
+        pass
+
+    return None

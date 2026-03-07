@@ -53,7 +53,7 @@ class HandlerTestPost(HandlerTestBase, table=False):
         return []
 
     @mutation(name="create_test_post")
-    async def create(cls, title: str, content: str) -> HandlerTestPost:
+    async def create(cls, title: str, content: str, query_meta: QueryMeta) -> HandlerTestPost:
         """Create a test post."""
         return HandlerTestPost(id=1, title=title, content=content)
 
