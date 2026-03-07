@@ -167,16 +167,18 @@ Turn your SQLModel entities into AI-ready tools with a single function call.
 
 ```python
 from sqlmodel_graphql.mcp import create_mcp_server
-from myapp.models import User, Post, Comment
+from myapp.models import BaseEntity
 
-# Create MCP server from your entities
+# Create MCP server from your base class
+# All SQLModel subclasses with @query/@mutation decorators are auto-discovered
 mcp = create_mcp_server(
-    entities=[User, Post, Comment],
+    base=BaseEntity,
     name="My Blog API"
 )
 
 # Run for AI assistants (Claude Desktop, etc.)
-mcp.run()
+mcp.run()  # stdio mode (default)
+# mcp.run(transport="streamable-http")  # HTTP mode
 ```
 
 ### Available MCP Tools
