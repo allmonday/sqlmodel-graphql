@@ -133,6 +133,47 @@ def _validate_and_dump(
         return data
 
 
+def _resolve_forward_reference(
+    annotation: str,
+    all_subclasses: set[type],
+) -> type | None:
+    """Resolve a string forward reference to an actual entity class.
+
+    Args:
+        annotation: String annotation (e.g., "EntityName", "list[EntityName]").
+        all_subclasses: Set of all SQLModel subclasses to search.
+
+    Returns:
+        Entity class or None if not found.
+    """
+    # Simple case: "EntityName"
+    if "[" not in annotation:
+        for subclass in all_subclasses:
+            if subclass.__name__ == annotation:
+                return subclass
+        return None
+
+    # Complex case: "list[EntityName]" or "list['EntityName']"
+    import re
+
+    # Try quoted format first: list['EntityName']
+    match = re.search(r"'([^']+)'", annotation)
+    if match:
+        entity_name = match.group(1)
+    else:
+        # Try unquoted format: list[EntityName]
+        match = re.search(r"\[([^\]]+)\]", annotation)
+        if match:
+            entity_name = match.group(1).strip("'\"")
+        else:
+            return None
+
+    for subclass in all_subclasses:
+        if subclass.__name__ == entity_name:
+            return subclass
+    return None
+
+
 def get_relation_entity(
     entity: type,
     field_name: str,
@@ -163,20 +204,15 @@ def get_relation_entity(
     # Check SQLModel relationships
     if hasattr(entity, "__sqlmodel_relationships__"):
         rel_info = entity.__sqlmodel_relationships__.get(field_name)
-        if rel_info is not None:
-            # Get type hint from the field
-            if hasattr(entity, "__annotations__"):
-                annotation = entity.__annotations__.get(field_name)
-                if annotation:
-                    result = _extract_entity_from_annotation(annotation, all_subclasses)
-                    if result:
-                        return result
-
-                    # Handle forward reference strings (e.g., "HandlerTestBook")
-                    if isinstance(annotation, str) and all_subclasses:
-                        for subclass in all_subclasses:
-                            if subclass.__name__ == annotation:
-                                return subclass
+        if rel_info is not None and hasattr(entity, "__annotations__"):
+            annotation = entity.__annotations__.get(field_name)
+            if annotation:
+                result = _extract_entity_from_annotation(annotation, all_subclasses)
+                if result:
+                    return result
+                # Handle string forward references
+                if isinstance(annotation, str) and all_subclasses:
+                    return _resolve_forward_reference(annotation, all_subclasses)
 
     # Fallback: try to get from annotations
     if hasattr(entity, "__annotations__"):
@@ -185,11 +221,9 @@ def get_relation_entity(
             result = _extract_entity_from_annotation(annotation, all_subclasses)
             if result:
                 return result
-            # Handle forward reference strings
+            # Handle string forward references
             if isinstance(annotation, str) and all_subclasses:
-                for subclass in all_subclasses:
-                    if subclass.__name__ == annotation:
-                        return subclass
+                return _resolve_forward_reference(annotation, all_subclasses)
 
     return None
 
@@ -221,48 +255,18 @@ def _extract_entity_from_annotation(
             if nested:
                 return nested
             # Handle string forward references in generic args
-            # (e.g., list["HandlerTestBook"])
             if isinstance(arg, str) and all_subclasses:
-                # Extract entity name from string like "HandlerTestBook"
-                # or "Optional[HandlerTestBook]"
-                entity_name = arg.strip("[]\"'").split("[")[-1].split("]")[0]
-                for subclass in all_subclasses:
-                    if subclass.__name__ == entity_name:
-                        return subclass
+                result = _resolve_forward_reference(arg, all_subclasses)
+                if result:
+                    return result
 
     # Direct type
     if isinstance(annotation, type):
         return annotation
 
-    # Handle string forward references (e.g., "HandlerTestBook", "list['HandlerTestBook']")
+    # Handle string forward references
     if isinstance(annotation, str) and all_subclasses:
-        # Extract entity name from string like "HandlerTestBook" or "list['HandlerTestBook']"
-        # Pattern 1: "EntityName"
-        if "[" not in annotation:
-            for subclass in all_subclasses:
-                if subclass.__name__ == annotation:
-                    return subclass
-        # Pattern 2: "list['EntityName']" or "list[EntityName]"
-        else:
-            # Extract the entity name from within quotes or brackets
-            import re
-
-            # Try quoted format first: list['EntityName']
-            match = re.search(r"'([^']+)'", annotation)
-            if match:
-                entity_name = match.group(1)
-            else:
-                # Try unquoted format: list[EntityName]
-                match = re.search(r"\[([^\]]+)\]", annotation)
-                if match:
-                    entity_name = match.group(1).strip("'\"")
-                else:
-                    entity_name = None
-
-            if entity_name:
-                for subclass in all_subclasses:
-                    if subclass.__name__ == entity_name:
-                        return subclass
+        return _resolve_forward_reference(annotation, all_subclasses)
 
     return None
 

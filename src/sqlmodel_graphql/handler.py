@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import inspect
+from collections import deque
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
@@ -213,10 +214,10 @@ class GraphQLHandler:
 
         # Step 3: BFS traversal to discover related entities
         discovered: set[type[SQLModel]] = set()
-        queue = list(root_entities)
+        queue: deque[type[SQLModel]] = deque(root_entities)
 
         while queue:
-            current = queue.pop(0)
+            current = queue.popleft()
             if current in discovered:
                 continue
             discovered.add(current)
