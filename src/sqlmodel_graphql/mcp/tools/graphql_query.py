@@ -42,10 +42,12 @@ def register_graphql_query_tool(mcp: FastMCP, handler: GraphQLHandler) -> None:
         optional arguments, and the fields you want to retrieve using dot notation.
 
         Args:
-            operation_name: The name of the GraphQL query operation (e.g., "users", "user", "posts").
-            arguments: Optional dictionary of arguments for the query (e.g., {"limit": 10, "id": 1}).
-            fields: List of field paths to retrieve, using dot notation for nested fields.
-                    For example: ["id", "name", "posts.title", "posts.author.name"]
+            operation_name: The name of the GraphQL query operation
+                (e.g., "users", "user", "posts").
+            arguments: Optional dictionary of arguments for the query
+                (e.g., {"limit": 10, "id": 1}).
+            fields: List of field paths to retrieve, using dot notation for nested
+                fields. For example: ["id", "name", "posts.title", "posts.author.name"]
 
         Returns:
             Dictionary with:

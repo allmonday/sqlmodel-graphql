@@ -4,7 +4,7 @@ from typing import Optional
 
 from sqlmodel import Field, Relationship, SQLModel, select
 
-from sqlmodel_graphql import mutation, query, QueryMeta
+from sqlmodel_graphql import QueryMeta, mutation, query
 
 
 class BaseEntity(SQLModel):
@@ -16,7 +16,7 @@ class BaseEntity(SQLModel):
 class User(BaseEntity, table=True):
     """User entity."""
 
-    id: Optional[int] = Field(default=None, primary_key=True)
+    id: int | None = Field(default=None, primary_key=True)
     name: str
     email: str
 
@@ -28,7 +28,7 @@ class User(BaseEntity, table=True):
 
     @query(name="users", description="Get all users with optional limit")
     async def get_all(
-        cls, limit: int = 10, query_meta: Optional[QueryMeta] = None
+        cls, limit: int = 10, query_meta: QueryMeta | None = None
     ) -> list["User"]:
         """Get all users with optional limit."""
         from demo.database import async_session
@@ -41,7 +41,7 @@ class User(BaseEntity, table=True):
             return list(result.all())
 
     @query(name="user", description="Get a user by ID")
-    async def get_by_id(cls, id: int, query_meta: Optional[QueryMeta] = None) -> Optional["User"]:
+    async def get_by_id(cls, id: int, query_meta: QueryMeta | None = None) -> Optional["User"]:
         """Get a user by ID."""
         from demo.database import async_session
 
@@ -73,7 +73,7 @@ class User(BaseEntity, table=True):
 class Post(BaseEntity, table=True):
     """Post entity."""
 
-    id: Optional[int] = Field(default=None, primary_key=True)
+    id: int | None = Field(default=None, primary_key=True)
     title: str
     content: str
     author_id: int = Field(foreign_key="user.id")
@@ -86,7 +86,7 @@ class Post(BaseEntity, table=True):
 
     @query(name="posts", description="Get all posts with optional limit")
     async def get_all(
-        cls, limit: int = 10, query_meta: Optional[QueryMeta] = None
+        cls, limit: int = 10, query_meta: QueryMeta | None = None
     ) -> list["Post"]:
         """Get all posts with optional limit."""
         from demo.database import async_session
@@ -99,7 +99,7 @@ class Post(BaseEntity, table=True):
             return list(result.all())
 
     @query(name="post", description="Get a post by ID")
-    async def get_by_id(cls, id: int, query_meta: Optional[QueryMeta] = None) -> Optional["Post"]:
+    async def get_by_id(cls, id: int, query_meta: QueryMeta | None = None) -> Optional["Post"]:
         """Get a post by ID."""
         from demo.database import async_session
 
@@ -112,7 +112,7 @@ class Post(BaseEntity, table=True):
 
     @query(name="posts_by_author", description="Get posts by author ID")
     async def get_by_author(
-        cls, author_id: int, limit: int = 10, query_meta: Optional[QueryMeta] = None
+        cls, author_id: int, limit: int = 10, query_meta: QueryMeta | None = None
     ) -> list["Post"]:
         """Get posts by author ID."""
         from demo.database import async_session
@@ -147,7 +147,7 @@ class Post(BaseEntity, table=True):
 class Comment(BaseEntity, table=True):
     """Comment entity."""
 
-    id: Optional[int] = Field(default=None, primary_key=True)
+    id: int | None = Field(default=None, primary_key=True)
     content: str
     post_id: int = Field(foreign_key="post.id")
     author_id: int = Field(foreign_key="user.id")
@@ -160,7 +160,7 @@ class Comment(BaseEntity, table=True):
 
     @query(name="comments", description="Get all comments with optional limit")
     async def get_all(
-        cls, limit: int = 10, query_meta: Optional[QueryMeta] = None
+        cls, limit: int = 10, query_meta: QueryMeta | None = None
     ) -> list["Comment"]:
         """Get all comments with optional limit."""
         from demo.database import async_session
@@ -173,7 +173,7 @@ class Comment(BaseEntity, table=True):
             return list(result.all())
 
     @query(name="comment", description="Get a comment by ID")
-    async def get_by_id(cls, id: int, query_meta: Optional[QueryMeta] = None) -> Optional["Comment"]:
+    async def get_by_id(cls, id: int, query_meta: QueryMeta | None = None) -> Optional["Comment"]:
         """Get a comment by ID."""
         from demo.database import async_session
 
@@ -186,7 +186,7 @@ class Comment(BaseEntity, table=True):
 
     @query(name="comments_by_post", description="Get comments by post ID")
     async def get_by_post(
-        cls, post_id: int, limit: int = 10, query_meta: Optional[QueryMeta] = None
+        cls, post_id: int, limit: int = 10, query_meta: QueryMeta | None = None
     ) -> list["Comment"]:
         """Get comments by post ID."""
         from demo.database import async_session
@@ -200,7 +200,7 @@ class Comment(BaseEntity, table=True):
 
     @query(name="comments_by_author", description="Get comments by author ID")
     async def get_by_author(
-        cls, author_id: int, limit: int = 10, query_meta: Optional[QueryMeta] = None
+        cls, author_id: int, limit: int = 10, query_meta: QueryMeta | None = None
     ) -> list["Comment"]:
         """Get comments by author ID."""
         from demo.database import async_session

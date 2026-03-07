@@ -4,16 +4,16 @@ Provides a GraphiQL interface for querying SQLModel entities.
 """
 
 from contextlib import asynccontextmanager
+from typing import Any
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, PlainTextResponse
 from pydantic import BaseModel
-from typing import Optional, Dict, Any
 
-from sqlmodel_graphql import GraphQLHandler
-from demo.models import BaseEntity
 from demo.database import init_db
+from demo.models import BaseEntity
+from sqlmodel_graphql import GraphQLHandler
 
 # GraphiQL HTML (loaded via CDN)
 GRAPHIQL_HTML = """
@@ -177,8 +177,8 @@ class GraphQLRequest(BaseModel):
     """GraphQL request model."""
 
     query: str
-    variables: Optional[Dict[str, Any]] = None
-    operation_name: Optional[str] = None
+    variables: dict[str, Any] | None = None
+    operation_name: str | None = None
 
 
 # Create GraphQL handler

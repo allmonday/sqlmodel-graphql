@@ -1,11 +1,12 @@
 """Tests for GraphQL introspection generator."""
 
-import pytest
 from enum import Enum
 from typing import Optional
-from sqlmodel import SQLModel, Field
 
-from sqlmodel_graphql import GraphQLHandler, query, mutation
+import pytest
+from sqlmodel import Field, SQLModel
+
+from sqlmodel_graphql import GraphQLHandler, mutation, query
 from sqlmodel_graphql.introspection import IntrospectionGenerator
 
 
@@ -23,7 +24,7 @@ class IntrospectionUser(IntrospectionBase, table=True):
     __tablename__ = "introspection_user"  # Unique table name to avoid conflicts
     id: int = Field(default=None, primary_key=True)
     name: str
-    email: Optional[str] = None
+    email: str | None = None
     status: Status = Status.ACTIVE
 
     @query(name="users")
@@ -35,7 +36,7 @@ class IntrospectionUser(IntrospectionBase, table=True):
         return None
 
     @mutation(name="createUser")
-    def create_user(cls, name: str, email: Optional[str] = None) -> "IntrospectionUser":
+    def create_user(cls, name: str, email: str | None = None) -> "IntrospectionUser":
         return cls(name=name, email=email)
 
 

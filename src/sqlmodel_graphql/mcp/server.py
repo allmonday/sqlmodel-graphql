@@ -17,14 +17,13 @@ from sqlmodel_graphql.mcp.tools import (
 
 if TYPE_CHECKING:
     from mcp.server.fastmcp import FastMCP
-
     from sqlmodel import SQLModel
 
 
 def create_mcp_server(
     base: type[SQLModel],
     name: str = "SQLModel GraphQL API",
-) -> "FastMCP":
+) -> FastMCP:
     """Create an MCP server that exposes GraphQL operations as tools.
 
     This function creates a FastMCP server with three tools:

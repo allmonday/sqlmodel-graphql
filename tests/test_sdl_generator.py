@@ -1,28 +1,24 @@
 """Tests for SDL generator."""
 
-from __future__ import annotations
+from typing import Optional
 
-from typing import TYPE_CHECKING, Optional
-
-import pytest
 from sqlmodel import Field, SQLModel
 
-from sqlmodel_graphql import SDLGenerator, mutation, query, QueryMeta
-
-if TYPE_CHECKING:
-    pass
+from sqlmodel_graphql import QueryMeta, SDLGenerator, mutation, query
 
 
 # Define entities at module level to avoid metadata conflicts
 class UserForTest(SQLModel):
     """Test User entity without table mapping."""
 
-    id: Optional[int] = Field(default=None, primary_key=True)
+    id: int | None = Field(default=None, primary_key=True)
     name: str
     email: str
 
     @query(name="users")
-    async def get_all(cls, limit: int = 10, query_meta: Optional[QueryMeta] = None) -> list[UserForTest]:  # type: ignore[misc]
+    async def get_all(
+        cls, limit: int = 10, query_meta: QueryMeta | None = None
+    ) -> list["UserForTest"]:
         """Get all users with optional query optimization."""
         # In real usage, query_meta would be used with QueryBuilder
         # to optimize the database query
@@ -32,7 +28,9 @@ class UserForTest(SQLModel):
         ][:limit]
 
     @query(name="user")
-    async def get_by_id(cls, id: int, query_meta: Optional[QueryMeta] = None) -> Optional[UserForTest]:
+    async def get_by_id(
+        cls, id: int, query_meta: QueryMeta | None = None
+    ) -> Optional["UserForTest"]:
         """Get user by ID."""
         users = {
             1: UserForTest(id=1, name="Alice", email="alice@example.com"),
@@ -41,7 +39,9 @@ class UserForTest(SQLModel):
         return users.get(id)
 
     @mutation(name="createUser")
-    async def create(cls, name: str, email: str, query_meta: Optional[QueryMeta] = None) -> UserForTest:
+    async def create(
+        cls, name: str, email: str, query_meta: QueryMeta | None = None
+    ) -> "UserForTest":
         """Create a new user."""
         return UserForTest(id=3, name=name, email=email)
 
@@ -49,7 +49,7 @@ class UserForTest(SQLModel):
 class PostForTest(SQLModel):
     """Test Post entity without table mapping."""
 
-    id: Optional[int] = Field(default=None, primary_key=True)
+    id: int | None = Field(default=None, primary_key=True)
     title: str
     content: str = ""
     author_id: int

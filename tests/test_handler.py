@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Optional
-
 import pytest
 from sqlmodel import Field, SQLModel
 
@@ -26,8 +24,8 @@ class HandlerTestUser(HandlerTestBase, table=False):
 
     @query(name="test_users")
     async def get_all(
-        cls, limit: int = 10, query_meta: Optional[QueryMeta] = None
-    ) -> list["HandlerTestUser"]:
+        cls, limit: int = 10, query_meta: QueryMeta | None = None
+    ) -> list[HandlerTestUser]:
         """Get all test users."""
         return [
             HandlerTestUser(id=1, name="Alice", email="alice@example.com"),
@@ -35,7 +33,9 @@ class HandlerTestUser(HandlerTestBase, table=False):
         ][:limit]
 
     @query(name="test_user")
-    async def get_by_id(cls, id: int, query_meta: Optional[QueryMeta] = None) -> Optional["HandlerTestUser"]:
+    async def get_by_id(
+        cls, id: int, query_meta: QueryMeta | None = None
+    ) -> HandlerTestUser | None:
         """Get test user by ID."""
         return HandlerTestUser(id=id, name="Test", email="test@example.com")
 
@@ -48,12 +48,12 @@ class HandlerTestPost(HandlerTestBase, table=False):
     content: str = ""
 
     @query(name="test_posts")
-    async def get_all(cls, query_meta: Optional[QueryMeta] = None) -> list["HandlerTestPost"]:
+    async def get_all(cls, query_meta: QueryMeta | None = None) -> list[HandlerTestPost]:
         """Get all test posts."""
         return []
 
     @mutation(name="create_test_post")
-    async def create(cls, title: str, content: str) -> "HandlerTestPost":
+    async def create(cls, title: str, content: str) -> HandlerTestPost:
         """Create a test post."""
         return HandlerTestPost(id=1, title=title, content=content)
 

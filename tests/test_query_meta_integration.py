@@ -1,6 +1,6 @@
 """Integration tests for query_meta with SQLite database."""
 
-from typing import TYPE_CHECKING, List, Optional
+from typing import TYPE_CHECKING
 
 import pytest
 import pytest_asyncio
@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlmodel import Field, Relationship, SQLModel, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from sqlmodel_graphql import GraphQLHandler, QueryParser, query
+from sqlmodel_graphql import QueryParser
 from sqlmodel_graphql.types import FieldSelection, QueryMeta, RelationshipSelection
 
 if TYPE_CHECKING:
@@ -21,10 +21,10 @@ class User(SQLModel, table=True):
 
     __test__ = False  # Tell pytest this is not a test class
 
-    id: Optional[int] = Field(default=None, primary_key=True)
+    id: int | None = Field(default=None, primary_key=True)
     name: str
     email: str
-    posts: List["Post"] = Relationship(back_populates="author")
+    posts: list["Post"] = Relationship(back_populates="author")
 
 
 class Post(SQLModel, table=True):
@@ -32,11 +32,11 @@ class Post(SQLModel, table=True):
 
     __test__ = False
 
-    id: Optional[int] = Field(default=None, primary_key=True)
+    id: int | None = Field(default=None, primary_key=True)
     title: str
     content: str = ""
     author_id: int = Field(foreign_key="user.id")
-    author: Optional[User] = Relationship(back_populates="posts")
+    author: User | None = Relationship(back_populates="posts")
 
 
 @pytest_asyncio.fixture
@@ -165,7 +165,7 @@ class TestQueryMetaIntegration:
         # Simulate usage within a @query decorated method
         async def get_users(
             session: AsyncSession,
-            query_meta: Optional[QueryMeta] = None
+            query_meta: QueryMeta | None = None
         ) -> list[User]:
             stmt = select(User)
             if query_meta:

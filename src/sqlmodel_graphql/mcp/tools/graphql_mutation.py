@@ -43,7 +43,8 @@ def register_graphql_mutation_tool(mcp: FastMCP, handler: GraphQLHandler) -> Non
 
         Args:
             operation_name: The name of the GraphQL mutation (e.g., "create_user", "create_post").
-            arguments: Dictionary of arguments for the mutation (e.g., {"name": "John", "email": "john@example.com"}).
+            arguments: Dictionary of arguments for the mutation
+                (e.g., {"name": "John", "email": "john@example.com"}).
             fields: Optional list of field paths to retrieve from the mutation result.
                     If not specified, returns all scalar fields.
                     Use dot notation for nested fields: ["id", "name", "author.email"]

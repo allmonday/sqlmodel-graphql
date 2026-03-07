@@ -50,7 +50,10 @@ def register_get_schema_tool(mcp: FastMCP, formatter: SchemaFormatter) -> None:
                 "types": [
                     {
                         "name": "User",
-                        "scalar_fields": [{"name": "id", "type": "Int"}, {"name": "name", "type": "String!"}],
+                        "scalar_fields": [
+                            {"name": "id", "type": "Int"},
+                            {"name": "name", "type": "String!"}
+                        ],
                         "relationship_fields": [{"name": "posts", "type": "[Post]!"}]
                     }
                 ]

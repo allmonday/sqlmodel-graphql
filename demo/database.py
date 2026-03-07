@@ -19,7 +19,8 @@ async def get_session() -> AsyncSession:
 async def init_db() -> None:
     """Initialize database tables and seed data."""
     from sqlmodel import SQLModel
-    from demo.models import User, Post, Comment
+
+    from demo.models import Comment, Post, User
 
     async with engine.begin() as conn:
         await conn.run_sync(SQLModel.metadata.create_all)
@@ -46,9 +47,17 @@ async def init_db() -> None:
         await session.refresh(user3)
 
         # Create sample posts
-        post1 = Post(title="Hello World", content="My first post!", author_id=user1.id)
-        post2 = Post(title="GraphQL is Great", content="Learning GraphQL with SQLModel", author_id=user1.id)
-        post3 = Post(title="Python Tips", content="Some useful Python tips", author_id=user2.id)
+        post1 = Post(
+            title="Hello World", content="My first post!", author_id=user1.id
+        )
+        post2 = Post(
+            title="GraphQL is Great",
+            content="Learning GraphQL with SQLModel",
+            author_id=user1.id,
+        )
+        post3 = Post(
+            title="Python Tips", content="Some useful Python tips", author_id=user2.id
+        )
         session.add(post1)
         session.add(post2)
         session.add(post3)
@@ -58,11 +67,25 @@ async def init_db() -> None:
         await session.refresh(post3)
 
         # Create sample comments
-        comment1 = Comment(content="Great post!", post_id=post1.id, author_id=user2.id)
-        comment2 = Comment(content="Thanks for sharing!", post_id=post1.id, author_id=user3.id)
-        comment3 = Comment(content="GraphQL is indeed amazing!", post_id=post2.id, author_id=user2.id)
-        comment4 = Comment(content="Very helpful tips!", post_id=post3.id, author_id=user1.id)
-        comment5 = Comment(content="I learned a lot from this!", post_id=post3.id, author_id=user3.id)
+        comment1 = Comment(
+            content="Great post!", post_id=post1.id, author_id=user2.id
+        )
+        comment2 = Comment(
+            content="Thanks for sharing!", post_id=post1.id, author_id=user3.id
+        )
+        comment3 = Comment(
+            content="GraphQL is indeed amazing!",
+            post_id=post2.id,
+            author_id=user2.id,
+        )
+        comment4 = Comment(
+            content="Very helpful tips!", post_id=post3.id, author_id=user1.id
+        )
+        comment5 = Comment(
+            content="I learned a lot from this!",
+            post_id=post3.id,
+            author_id=user3.id,
+        )
         session.add(comment1)
         session.add(comment2)
         session.add(comment3)

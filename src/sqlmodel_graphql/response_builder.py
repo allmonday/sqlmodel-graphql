@@ -7,12 +7,11 @@ unwanted fields (like foreign keys) during serialization.
 
 from __future__ import annotations
 
-from functools import lru_cache
 from typing import Any, get_args, get_origin
 
 from pydantic import BaseModel, create_model
 
-from sqlmodel_graphql.utils.type_utils import get_field_type, is_optional_type
+from sqlmodel_graphql.utils.type_utils import get_field_type
 
 
 def build_response_model(

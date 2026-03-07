@@ -17,8 +17,8 @@ project_root = Path(__file__).parent.parent
 if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
-from demo.models import BaseEntity
-from sqlmodel_graphql.mcp import create_mcp_server
+from demo.models import BaseEntity  # noqa: E402
+from sqlmodel_graphql.mcp import create_mcp_server  # noqa: E402
 
 
 def main() -> None:

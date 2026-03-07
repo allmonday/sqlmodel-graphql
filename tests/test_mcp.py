@@ -12,6 +12,14 @@ from sqlmodel_graphql.mcp.types.errors import (
     create_success_response,
 )
 
+# Check if mcp module is available
+try:
+    import mcp  # noqa: F401
+
+    HAS_MCP = True
+except ImportError:
+    HAS_MCP = False
+
 
 class TestGraphQLQueryBuilder:
     """Tests for GraphQLQueryBuilder."""
@@ -210,7 +218,6 @@ class TestSchemaFormatter:
 
     def test_get_schema_info_structure(self) -> None:
         """Test that get_schema_info returns proper structure using test entities."""
-        from typing import Optional
 
         from sqlmodel import Field, SQLModel
 
@@ -229,7 +236,7 @@ class TestSchemaFormatter:
             name: str
 
             @query(name="test_users")
-            async def get_all(cls) -> list["TestUser"]:
+            async def get_all(cls) -> list[TestUser]:
                 return []
 
         handler = GraphQLHandler(base=TestBase)
@@ -267,7 +274,7 @@ class TestSchemaFormatter:
             content: str
 
             @query(name="test_posts")
-            async def get_all(cls) -> list["TestPost"]:
+            async def get_all(cls) -> list[TestPost]:
                 return []
 
         handler = GraphQLHandler(base=TestBase)
@@ -286,7 +293,6 @@ class TestSchemaFormatter:
 
     def test_query_has_arguments(self) -> None:
         """Test that queries have properly formatted arguments."""
-        from typing import Optional
 
         from sqlmodel import Field, SQLModel
 
@@ -302,7 +308,7 @@ class TestSchemaFormatter:
             name: str
 
             @query(name="test_item")
-            async def get_by_id(cls, item_id: int) -> Optional["TestItem"]:
+            async def get_by_id(cls, item_id: int) -> TestItem | None:
                 return None
 
         handler = GraphQLHandler(base=TestBase)
@@ -325,6 +331,7 @@ class TestSchemaFormatter:
         assert "type" in id_arg
 
 
+@pytest.mark.skipif(not HAS_MCP, reason="mcp package not installed")
 class TestMCPServerCreation:
     """Tests for MCP server creation."""
 
@@ -343,7 +350,7 @@ class TestMCPServerCreation:
             name: str
 
             @query(name="test_entities")
-            async def get_all(cls) -> list["TestEntity"]:
+            async def get_all(cls) -> list[TestEntity]:
                 return []
 
         mcp = create_mcp_server(

@@ -217,8 +217,14 @@ class SDLGenerator:
         )
 
         # Get type hints from the function's module context
+        # Include entity in localns to resolve forward references
         try:
-            hints = get_type_hints(func)
+            globalns = getattr(func, "__globals__", {})
+            localns = {entity.__name__: entity}
+            # Add all known entities to localns for forward reference resolution
+            for e in self.entities:
+                localns[e.__name__] = e
+            hints = get_type_hints(func, globalns=globalns, localns=localns)
         except Exception:
             hints = {}
 
