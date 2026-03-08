@@ -73,6 +73,7 @@ class SDLGenerator:
         """
         self.entities = entities
         self._entity_names = {e.__name__ for e in entities}
+        self._entity_map = {e.__name__: e for e in entities}
         self._converter = TypeConverter(self._entity_names)
         self._query_description = query_description
         self._mutation_description = mutation_description
@@ -283,3 +284,140 @@ class SDLGenerator:
             field_def = f'"""{description}"""\n  {field_def}'
 
         return field_def
+
+    def _collect_related_entities(
+        self, type_hint: Any, visited: set[str] | None = None
+    ) -> set[str]:
+        """Recursively collect all entity types related to a type hint.
+
+        Args:
+            type_hint: Python type hint to analyze.
+            visited: Set of already visited entity names (for cycle detection).
+
+        Returns:
+            Set of entity names that are reachable from the type hint.
+        """
+        if visited is None:
+            visited = set()
+
+        # Unwrap type to get base type
+        base_type = self._converter.unwrap_to_base_type(type_hint)
+
+        # Check if it's an entity
+        entity_name = self._converter.get_entity_name(base_type)
+        if not entity_name or entity_name in visited:
+            return visited
+
+        visited.add(entity_name)
+
+        # Get the entity class
+        entity = self._entity_map.get(entity_name)
+        if not entity:
+            return visited
+
+        # Recursively collect from entity's fields
+        hints = get_type_hints(entity)
+        for field_hint in hints.values():
+            visited = self._collect_related_entities(field_hint, visited)
+
+        return visited
+
+    def _find_operation_method(
+        self, operation_name: str, operation_type: str
+    ) -> tuple[Any, type[SQLModel]] | None:
+        """Find the method and entity for a given operation name.
+
+        Args:
+            operation_name: Name of the GraphQL operation (e.g., "users").
+            operation_type: "Query" or "Mutation".
+
+        Returns:
+            Tuple of (method, entity) or None if not found.
+        """
+        decorator_attr = (
+            "_graphql_query" if operation_type == "Query" else "_graphql_mutation"
+        )
+
+        for entity in self.entities:
+            for name in dir(entity):
+                try:
+                    attr = getattr(entity, name)
+                    if callable(attr) and hasattr(attr, decorator_attr):
+                        func = attr.__func__ if hasattr(attr, "__func__") else attr
+                        gql_name = getattr(func, "_graphql_query_name", None) or getattr(
+                            func, "_graphql_mutation_name", None
+                        )
+                        if gql_name == operation_name:
+                            return (attr, entity)
+                except Exception:
+                    continue
+
+        return None
+
+    def generate_operation_sdl(
+        self, operation_name: str, operation_type: str = "Query"
+    ) -> str | None:
+        """Generate SDL for a single operation and its related types.
+
+        Args:
+            operation_name: Name of the GraphQL operation (e.g., "users").
+            operation_type: "Query" or "Mutation".
+
+        Returns:
+            SDL string for the operation and related types, or None if not found.
+
+        Example:
+            >>> generator.generate_operation_sdl("users", "Query")
+            '# Query\\nusers(limit: Int): [User!]!\\n\\n# Related Types\\ntype User { ... }'
+        """
+        # Find the operation method
+        result = self._find_operation_method(operation_name, operation_type)
+        if not result:
+            return None
+
+        method, entity = result
+
+        # Get return type to collect related entities
+        func = method.__func__ if hasattr(method, "__func__") else method
+        try:
+            globalns = getattr(func, "__globals__", {})
+            localns = {e.__name__: e for e in self.entities}
+            hints = get_type_hints(func, globalns=globalns, localns=localns)
+            return_type = hints.get("return")
+        except Exception:
+            return_type = None
+
+        # Collect related entity names
+        related_entities: set[str] = set()
+        if return_type:
+            related_entities = self._collect_related_entities(return_type)
+
+        # For mutations, also collect from argument types
+        if operation_type == "Mutation":
+            sig = inspect.signature(func)
+            for param_name in sig.parameters:
+                if param_name in ("cls", "self", "query_meta"):
+                    continue
+                if param_name in hints:
+                    related_entities.update(self._collect_related_entities(hints[param_name]))
+
+        # Build SDL parts
+        parts = []
+
+        # Generate operation line
+        field_def = self._method_to_graphql_field(method, entity)
+        # Remove leading spaces from field_def (it's formatted for type body)
+        field_def = field_def.strip()
+        parts.append(f"# {operation_type}\n{field_def}")
+
+        # Generate related types
+        if related_entities:
+            type_parts = []
+            for entity_name in sorted(related_entities):
+                related_entity = self._entity_map.get(entity_name)
+                if related_entity:
+                    type_parts.append(self._generate_type(related_entity))
+            if type_parts:
+                parts.append("# Related Types\n" + "\n\n".join(type_parts))
+
+        return "\n\n".join(parts)

@@ -89,6 +89,9 @@ def create_mcp_server(
     # Create the type tracer for progressive disclosure
     tracer = TypeTracer(introspection_data, entity_names)
 
+    # Get SDL generator for direct SDL generation
+    sdl_generator = handler._sdl_generator
+
     # Create the FastMCP server
     mcp = FastMCP(name)
 
@@ -96,7 +99,7 @@ def create_mcp_server(
     register_list_operations_tools(mcp, tracer)
 
     # Register Layer 2 tools (operation details + related types)
-    register_get_operation_schema_tools(mcp, tracer)
+    register_get_operation_schema_tools(mcp, tracer, sdl_generator)
 
     # Register Layer 3 tools (query execution)
     register_graphql_query_tool(mcp, handler)

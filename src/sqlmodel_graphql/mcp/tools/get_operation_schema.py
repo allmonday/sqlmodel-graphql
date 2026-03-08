@@ -12,7 +12,6 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, Literal
 
-from sqlmodel_graphql.mcp.builders.introspection_to_sdl import IntrospectionToSDL
 from sqlmodel_graphql.mcp.types.errors import (
     MCPErrors,
     create_error_response,
@@ -23,16 +22,18 @@ if TYPE_CHECKING:
     from mcp.server.fastmcp import FastMCP
 
     from sqlmodel_graphql.mcp.builders.type_tracer import TypeTracer
+    from sqlmodel_graphql.sdl_generator import SDLGenerator
 
 
 def register_get_operation_schema_tools(
-    mcp: "FastMCP", tracer: "TypeTracer"
+    mcp: "FastMCP", tracer: "TypeTracer", sdl_generator: "SDLGenerator"
 ) -> None:
     """Register get_query_schema and get_mutation_schema tools with the MCP server.
 
     Args:
         mcp: The FastMCP server instance.
         tracer: The TypeTracer instance.
+        sdl_generator: The SDLGenerator instance for direct SDL generation.
     """
 
     @mcp.tool()
@@ -77,7 +78,17 @@ def register_get_operation_schema_tools(
             }
         """
         try:
-            # Get the operation field
+            # For SDL format, use SDLGenerator directly (more efficient)
+            if response_type == "sdl":
+                sdl = sdl_generator.generate_operation_sdl(name, "Query")
+                if sdl is None:
+                    return create_error_response(
+                        f"Query '{name}' not found",
+                        MCPErrors.TYPE_NOT_FOUND,
+                    )
+                return create_success_response({"sdl": sdl})
+
+            # For introspection format, use TypeTracer
             operation = tracer.get_operation_field("Query", name)
             if operation is None:
                 return create_error_response(
@@ -92,17 +103,10 @@ def register_get_operation_schema_tools(
             # Get introspection data for related types
             types = tracer.get_introspection_for_types(related_type_names)
 
-            if response_type == "sdl":
-                converter = IntrospectionToSDL()
-                sdl = converter.convert_operation_with_types(
-                    operation, types, "Query"
-                )
-                return create_success_response({"sdl": sdl})
-            else:
-                return create_success_response({
-                    "operation": operation,
-                    "types": types,
-                })
+            return create_success_response({
+                "operation": operation,
+                "types": types,
+            })
 
         except Exception as e:
             return {
@@ -153,7 +157,17 @@ def register_get_operation_schema_tools(
             }
         """
         try:
-            # Get the operation field
+            # For SDL format, use SDLGenerator directly (more efficient)
+            if response_type == "sdl":
+                sdl = sdl_generator.generate_operation_sdl(name, "Mutation")
+                if sdl is None:
+                    return create_error_response(
+                        f"Mutation '{name}' not found",
+                        MCPErrors.TYPE_NOT_FOUND,
+                    )
+                return create_success_response({"sdl": sdl})
+
+            # For introspection format, use TypeTracer
             operation = tracer.get_operation_field("Mutation", name)
             if operation is None:
                 return create_error_response(
@@ -173,17 +187,10 @@ def register_get_operation_schema_tools(
             # Get introspection data for related types
             types = tracer.get_introspection_for_types(related_type_names)
 
-            if response_type == "sdl":
-                converter = IntrospectionToSDL()
-                sdl = converter.convert_operation_with_types(
-                    operation, types, "Mutation"
-                )
-                return create_success_response({"sdl": sdl})
-            else:
-                return create_success_response({
-                    "operation": operation,
-                    "types": types,
-                })
+            return create_success_response({
+                "operation": operation,
+                "types": types,
+            })
 
         except Exception as e:
             return {
