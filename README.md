@@ -199,43 +199,59 @@ mcp.run()  # stdio mode (default)
 
 ### Available MCP Tools
 
-The server exposes three tools for AI:
+The server exposes six tools with three-layer progressive disclosure:
 
-1. **get_schema** - Discover available queries, mutations, and types
-2. **graphql_query** - Execute dynamic GraphQL queries with dot-notation field paths
-3. **graphql_mutation** - Execute GraphQL mutations
+**Layer 1 - Discover:**
+- **list_queries** - List all available queries with names and descriptions
+- **list_mutations** - List all available mutations with names and descriptions
+
+**Layer 2 - Understand:**
+- **get_query_schema** - Get detailed schema for a specific query (SDL or introspection format)
+- **get_mutation_schema** - Get detailed schema for a specific mutation
+
+**Layer 3 - Execute:**
+- **graphql_query** - Execute GraphQL queries directly
+- **graphql_mutation** - Execute GraphQL mutations directly
 
 ### Example: AI Query Flow
 
 ```
-AI: What data is available?
-    → get_schema() → Returns queries, mutations, types
+AI: What queries are available?
+    → list_queries() → Returns: [{"name": "users", "description": "Get all users"}, ...]
+
+AI: Tell me about the "users" query
+    → get_query_schema(name="users", response_type="sdl")
+    → Returns:
+       # Query
+       users(limit: Int): [User!]!
+
+       # Related Types
+       type User {
+         id: Int!
+         name: String!
+         email: String!
+         posts: [Post!]!
+       }
 
 AI: Get users with their posts
-    → graphql_query(
-        operation_name="users",
-        arguments={"limit": 10},
-        fields=["id", "name", "posts.title", "posts.content"]
-      )
+    → graphql_query(query="{ users(limit: 10) { id name posts { title } } }")
 
 AI: Create a new user
-    → graphql_mutation(
-        operation_name="create_user",
-        arguments={"name": "Alice", "email": "alice@example.com"},
-        fields=["id", "name"]
-      )
+    → graphql_mutation(query="mutation { createUser(name: \"Alice\", email: \"alice@example.com\") { id name } }")
 ```
 
 ### Why MCP?
 
-Traditional GraphQL requires AI to:
-- Know the exact GraphQL syntax
-- Understand the full schema structure
+**Three-Layer Progressive Disclosure:**
+- Layer 1: Lightweight operation lists (~50 tokens)
+- Layer 2: On-demand schema details with SDL format
+- Layer 3: Direct GraphQL execution
 
-With MCP, AI can:
-- Discover schema dynamically via `get_schema`
-- Query with simple field paths (no GraphQL syntax needed)
-- Focus on business logic, not query construction
+**Benefits:**
+- AI discovers schema dynamically
+- SDL format is compact and AI-friendly
+- Standard GraphQL syntax - no custom formats to learn
+- Minimal context usage for large schemas
 
 ### Installation
 

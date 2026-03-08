@@ -1,15 +1,13 @@
 """graphql_query MCP tool.
 
-Executes dynamic GraphQL queries based on field paths.
+Executes GraphQL queries directly.
 """
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from sqlmodel_graphql.mcp.builders.query_builder import GraphQLQueryBuilder
 from sqlmodel_graphql.mcp.types.errors import (
-    MCPError,
     MCPErrors,
     create_error_response,
     create_success_response,
@@ -21,36 +19,27 @@ if TYPE_CHECKING:
     from sqlmodel_graphql.handler import GraphQLHandler
 
 
-def register_graphql_query_tool(mcp: FastMCP, handler: GraphQLHandler) -> None:
+def register_graphql_query_tool(mcp: "FastMCP", handler: "GraphQLHandler") -> None:
     """Register the graphql_query tool with the MCP server.
 
     Args:
         mcp: The FastMCP server instance.
         handler: The GraphQLHandler instance.
     """
-    builder = GraphQLQueryBuilder()
 
     @mcp.tool()
-    async def graphql_query(
-        operation_name: str,
-        arguments: dict[str, Any] | None,
-        fields: list[str],
-    ) -> dict[str, Any]:
-        """Execute a GraphQL query dynamically.
+    async def graphql_query(query: str) -> dict[str, Any]:
+        """Execute a GraphQL query.
 
-        This tool allows you to query any GraphQL operation by specifying the operation name,
-        optional arguments, and the fields you want to retrieve using dot notation.
+        Use this tool to execute GraphQL queries after discovering available
+        operations with list_queries and understanding their schema with
+        get_query_schema.
 
         Args:
-            operation_name: The name of the GraphQL query operation
-                (e.g., "users", "user", "posts").
-            arguments: Optional dictionary of arguments for the query
-                (e.g., {"limit": 10, "id": 1}).
-            fields: List of field paths to retrieve, using dot notation for nested
-                fields. For example: ["id", "name", "posts.title", "posts.author.name"]
+            query: A GraphQL query string.
 
         Returns:
-            Dictionary with:
+            Dictionary containing:
             - success: True if query succeeded
             - data: The query result (if successful)
             - error: Error message (if failed)
@@ -58,43 +47,24 @@ def register_graphql_query_tool(mcp: FastMCP, handler: GraphQLHandler) -> None:
 
         Examples:
             # Simple query
-            graphql_query(
-                operation_name="users",
-                arguments={"limit": 10},
-                fields=["id", "name", "email"]
-            )
+            graphql_query(query="{ users(limit: 10) { id name email } }")
 
-            # Nested query
-            graphql_query(
-                operation_name="user",
-                arguments={"id": 1},
-                fields=["id", "name", "posts.title", "posts.comments.content"]
-            )
+            # Query with nested fields
+            graphql_query(query="{ user(id: 1) { id name posts { title } } }")
+
+            # Multiple operations in one query
+            graphql_query(query="{ users { id name } posts { id title } }")
         """
         try:
-            # Validate inputs
-            if not operation_name:
+            # Validate input
+            if not query or not query.strip():
                 return create_error_response(
-                    "operation_name is required",
+                    "query is required and cannot be empty",
                     MCPErrors.MISSING_REQUIRED_FIELD,
                 )
-
-            if not fields:
-                return create_error_response(
-                    "At least one field must be specified",
-                    MCPErrors.MISSING_REQUIRED_FIELD,
-                )
-
-            # Build the GraphQL query string
-            query_str = builder.build_query(
-                operation_name=operation_name,
-                arguments=arguments,
-                fields=fields,
-                operation_type="query",
-            )
 
             # Execute the query
-            result = await handler.execute(query_str)
+            result = await handler.execute(query)
 
             # Check for GraphQL errors
             if "errors" in result:
@@ -108,11 +78,9 @@ def register_graphql_query_tool(mcp: FastMCP, handler: GraphQLHandler) -> None:
                 )
 
             # Return the data
-            data = result.get("data", {}).get(operation_name)
+            data = result.get("data")
             return create_success_response(data)
 
-        except MCPError as e:
-            return create_error_response(e)
         except Exception as e:
             return create_error_response(
                 str(e),
