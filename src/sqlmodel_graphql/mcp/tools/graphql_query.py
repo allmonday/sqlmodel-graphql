@@ -19,7 +19,7 @@ if TYPE_CHECKING:
     from sqlmodel_graphql.handler import GraphQLHandler
 
 
-def register_graphql_query_tool(mcp: "FastMCP", handler: "GraphQLHandler") -> None:
+def register_graphql_query_tool(mcp: FastMCP, handler: GraphQLHandler) -> None:
     """Register the graphql_query tool with the MCP server.
 
     Args:

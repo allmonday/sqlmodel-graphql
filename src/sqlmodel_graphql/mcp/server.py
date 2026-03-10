@@ -27,7 +27,7 @@ def create_mcp_server(
     name: str = "SQLModel GraphQL API",
     query_description: str | None = None,
     mutation_description: str | None = None,
-) -> "FastMCP":
+) -> FastMCP:
     """Create an MCP server that exposes GraphQL operations as tools.
 
     This function creates a FastMCP server with three-layer progressive disclosure:

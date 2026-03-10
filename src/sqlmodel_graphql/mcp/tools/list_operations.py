@@ -16,7 +16,7 @@ if TYPE_CHECKING:
     from sqlmodel_graphql.mcp.builders.type_tracer import TypeTracer
 
 
-def register_list_operations_tools(mcp: "FastMCP", tracer: "TypeTracer") -> None:
+def register_list_operations_tools(mcp: FastMCP, tracer: TypeTracer) -> None:
     """Register list_queries and list_mutations tools with the MCP server.
 
     Args:

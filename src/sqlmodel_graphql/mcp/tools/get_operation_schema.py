@@ -26,7 +26,7 @@ if TYPE_CHECKING:
 
 
 def register_get_operation_schema_tools(
-    mcp: "FastMCP", tracer: "TypeTracer", sdl_generator: "SDLGenerator"
+    mcp: FastMCP, tracer: TypeTracer, sdl_generator: SDLGenerator
 ) -> None:
     """Register get_query_schema and get_mutation_schema tools with the MCP server.
 

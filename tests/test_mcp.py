@@ -520,7 +520,7 @@ class TestThreeLayerProgressiveDisclosure:
             name: str
 
             @query(name="test_users")
-            async def get_all(cls, limit: int = 10) -> list["TestUser"]:
+            async def get_all(cls, limit: int = 10) -> list[TestUser]:
                 """Get all test users."""
                 return []
 
