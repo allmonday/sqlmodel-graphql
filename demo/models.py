@@ -13,6 +13,19 @@ class BaseEntity(SQLModel):
     pass
 
 
+class UserFavoritePost(BaseEntity, table=True):
+    """User-Post favorite relationship (many-to-many link table).
+
+    This is a link table connecting User and Post in a many-to-many relationship.
+    Following SQLModel best practices, we only define the foreign keys here.
+    """
+
+    __tablename__ = "user_favorite_post"
+
+    user_id: int = Field(foreign_key="user.id", primary_key=True)
+    post_id: int = Field(foreign_key="post.id", primary_key=True)
+
+
 class User(BaseEntity, table=True):
     """User entity."""
 
@@ -25,6 +38,12 @@ class User(BaseEntity, table=True):
 
     # Relationship: User has many comments
     comments: list["Comment"] = Relationship(back_populates="author")
+
+    # Relationship: User has many favorite posts (many-to-many, through link table)
+    favorite_posts: list["Post"] = Relationship(
+        back_populates="favorited_by_users",
+        link_model=UserFavoritePost
+    )
 
     @query(name="users", description="Get all users with optional limit")
     async def get_all(
@@ -77,6 +96,70 @@ class User(BaseEntity, table=True):
             result = await session.exec(stmt)
             return result.first()
 
+    @mutation(name="add_favorite", description="Add a post to user's favorites")
+    async def add_favorite(
+        cls, user_id: int, post_id: int, query_meta: QueryMeta
+    ) -> "User":
+        """Add a post to user's favorites (idempotent)."""
+        from demo.database import async_session
+
+        async with async_session() as session:
+            # Check if user exists
+            user_result = await session.exec(select(cls).where(cls.id == user_id))
+            user = user_result.first()
+            if not user:
+                raise ValueError("User not found")
+
+            # Check if post exists
+            post_result = await session.exec(select(Post).where(Post.id == post_id))
+            post = post_result.first()
+            if not post:
+                raise ValueError("Post not found")
+
+            # Check if already favorited
+            existing_favorite = await session.exec(
+                select(UserFavoritePost).where(
+                    UserFavoritePost.user_id == user_id,
+                    UserFavoritePost.post_id == post_id,
+                )
+            )
+            if existing_favorite.first():
+                # Return user with relationships loaded
+                stmt = select(cls).where(cls.id == user_id)
+                stmt = stmt.options(*query_meta.to_options(cls))
+                result = await session.exec(stmt)
+                return result.first()
+
+            # Create favorite relationship
+            favorite = UserFavoritePost(user_id=user_id, post_id=post_id)
+            session.add(favorite)
+            await session.commit()
+
+            # Return user with relationships loaded
+            stmt = select(cls).where(cls.id == user_id)
+            stmt = stmt.options(*query_meta.to_options(cls))
+            result = await session.exec(stmt)
+            return result.first()
+
+    @mutation(name="remove_favorite", description="Remove a post from user's favorites")
+    async def remove_favorite(cls, user_id: int, post_id: int) -> bool:
+        """Remove a post from user's favorites."""
+        from demo.database import async_session
+
+        async with async_session() as session:
+            existing = await session.exec(
+                select(UserFavoritePost).where(
+                    UserFavoritePost.user_id == user_id,
+                    UserFavoritePost.post_id == post_id,
+                )
+            )
+            favorite = existing.first()
+            if favorite:
+                await session.delete(favorite)
+                await session.commit()
+                return True
+            return False
+
 
 class Post(BaseEntity, table=True):
     """Post entity."""
@@ -91,6 +174,12 @@ class Post(BaseEntity, table=True):
 
     # Relationship: Post has many comments
     comments: list["Comment"] = Relationship(back_populates="post")
+
+    # Relationship: Post has many favoriting users (many-to-many, through link table)
+    favorited_by_users: list["User"] = Relationship(
+        back_populates="favorite_posts",
+        link_model=UserFavoritePost
+    )
 
     @query(name="posts", description="Get all posts with optional limit")
     async def get_all(

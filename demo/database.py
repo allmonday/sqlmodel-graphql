@@ -20,7 +20,7 @@ async def init_db() -> None:
     """Initialize database tables and seed data."""
     from sqlmodel import SQLModel
 
-    from demo.models import Comment, Post, User
+    from demo.models import Comment, Post, User, UserFavoritePost
 
     async with engine.begin() as conn:
         await conn.run_sync(SQLModel.metadata.create_all)
@@ -91,4 +91,17 @@ async def init_db() -> None:
         session.add(comment3)
         session.add(comment4)
         session.add(comment5)
+        await session.commit()
+
+        # Create sample favorites
+        favorite1 = UserFavoritePost(user_id=user2.id, post_id=post1.id)
+        favorite2 = UserFavoritePost(user_id=user3.id, post_id=post1.id)
+        favorite3 = UserFavoritePost(user_id=user1.id, post_id=post2.id)
+        favorite4 = UserFavoritePost(user_id=user3.id, post_id=post3.id)
+        favorite5 = UserFavoritePost(user_id=user1.id, post_id=post3.id)
+        session.add(favorite1)
+        session.add(favorite2)
+        session.add(favorite3)
+        session.add(favorite4)
+        session.add(favorite5)
         await session.commit()
