@@ -262,3 +262,162 @@ class TestListStrArgument:
         assert "data" in result
         assert "test_by_tags" in result["data"]
         assert len(result["data"]["test_by_tags"]) == 0
+
+
+# ============================================================================
+# Tests for comprehensive list argument handling
+# ============================================================================
+
+
+class HandlerTestListMutation(HandlerTestBase, table=False):
+    """Test entity with list argument mutations."""
+
+    id: int = Field(primary_key=True)
+    title: str = ""
+    items: list[str] = Field(default_factory=list)
+    numbers: list[int] = Field(default_factory=list)
+
+    @mutation(name="create_with_items")
+    async def create_with_items(
+        cls, title: str, items: list[str], query_meta: QueryMeta | None = None
+    ) -> HandlerTestListMutation:
+        """Create entity with list of strings."""
+        return HandlerTestListMutation(id=1, title=title, items=items)
+
+    @mutation(name="create_with_numbers")
+    async def create_with_numbers(
+        cls, numbers: list[int], query_meta: QueryMeta | None = None
+    ) -> HandlerTestListMutation:
+        """Create entity with list of integers."""
+        return HandlerTestListMutation(id=1, numbers=numbers)
+
+    @mutation(name="create_with_mixed_list")
+    async def create_with_mixed_list(
+        cls,
+        title: str,
+        items: list[str],
+        numbers: list[int],
+        query_meta: QueryMeta | None = None,
+    ) -> HandlerTestListMutation:
+        """Create entity with multiple list arguments."""
+        return HandlerTestListMutation(id=1, title=title, items=items, numbers=numbers)
+
+
+class TestListArgumentInMutation:
+    """Tests for list argument handling in mutations."""
+
+    @pytest.fixture
+    def handler(self) -> GraphQLHandler:
+        """Create handler with base parameter."""
+        return GraphQLHandler(base=HandlerTestBase)
+
+    @pytest.mark.asyncio
+    async def test_mutation_with_list_str(self, handler: GraphQLHandler) -> None:
+        """Test mutation with list[str] argument."""
+        query = (
+            'mutation { create_with_items(title: "Test", '
+            'items: ["a", "b", "c"]) { id title items } }'
+        )
+        result = await handler.execute(query)
+
+        assert "data" in result
+        assert result["data"]["create_with_items"]["title"] == "Test"
+        assert result["data"]["create_with_items"]["items"] == ["a", "b", "c"]
+
+    @pytest.mark.asyncio
+    async def test_mutation_with_chinese_strings(self, handler: GraphQLHandler) -> None:
+        """Test mutation with Chinese strings in list."""
+        query = (
+            'mutation { create_with_items(title: "任务", '
+            'items: ["洗脸", "刷牙", "洗脚"]) { id title items } }'
+        )
+        result = await handler.execute(query)
+
+        assert "data" in result
+        assert result["data"]["create_with_items"]["title"] == "任务"
+        assert result["data"]["create_with_items"]["items"] == ["洗脸", "刷牙", "洗脚"]
+
+    @pytest.mark.asyncio
+    async def test_mutation_with_list_int(self, handler: GraphQLHandler) -> None:
+        """Test mutation with list[int] argument."""
+        result = await handler.execute(
+            "mutation { create_with_numbers(numbers: [1, 2, 3, 4, 5]) { id numbers } }"
+        )
+
+        assert "data" in result
+        assert result["data"]["create_with_numbers"]["numbers"] == [1, 2, 3, 4, 5]
+
+    @pytest.mark.asyncio
+    async def test_mutation_with_empty_list(self, handler: GraphQLHandler) -> None:
+        """Test mutation with empty list argument."""
+        result = await handler.execute(
+            'mutation { create_with_items(title: "Empty", items: []) { id title items } }'
+        )
+
+        assert "data" in result
+        assert result["data"]["create_with_items"]["items"] == []
+
+    @pytest.mark.asyncio
+    async def test_mutation_with_multiple_lists(
+        self, handler: GraphQLHandler
+    ) -> None:
+        """Test mutation with multiple list arguments."""
+        query = (
+            'mutation { create_with_mixed_list(title: "Mixed", '
+            'items: ["x", "y"], numbers: [10, 20]) { id title items numbers } }'
+        )
+        result = await handler.execute(query)
+
+        assert "data" in result
+        assert result["data"]["create_with_mixed_list"]["title"] == "Mixed"
+        assert result["data"]["create_with_mixed_list"]["items"] == ["x", "y"]
+        assert result["data"]["create_with_mixed_list"]["numbers"] == [10, 20]
+
+    @pytest.mark.asyncio
+    async def test_mutation_with_single_item_list(
+        self, handler: GraphQLHandler
+    ) -> None:
+        """Test mutation with single item in list."""
+        result = await handler.execute(
+            'mutation { create_with_items(title: "Single", items: ["only"]) { id items } }'
+        )
+
+        assert "data" in result
+        assert result["data"]["create_with_items"]["items"] == ["only"]
+
+
+class TestArgumentBuilderEdgeCases:
+    """Tests for edge cases in argument building."""
+
+    @pytest.fixture
+    def handler(self) -> GraphQLHandler:
+        """Create handler with base parameter."""
+        return GraphQLHandler(base=HandlerTestBase)
+
+    @pytest.mark.asyncio
+    async def test_list_with_special_characters(
+        self, handler: GraphQLHandler
+    ) -> None:
+        """Test list with special characters in strings."""
+        query = (
+            'mutation { create_with_items(title: "Special", '
+            'items: ["hello world", "foo-bar", "test_123"]) { id items } }'
+        )
+        result = await handler.execute(query)
+
+        assert "data" in result
+        assert result["data"]["create_with_items"]["items"] == [
+            "hello world",
+            "foo-bar",
+            "test_123",
+        ]
+
+    @pytest.mark.asyncio
+    async def test_query_list_still_works(self, handler: GraphQLHandler) -> None:
+        """Ensure query with list argument still works after fix."""
+        result = await handler.execute(
+            '{ test_by_tags(tags: ["alpha", "beta"]) { id tags } }'
+        )
+
+        assert "data" in result
+        assert result["data"]["test_by_tags"][0]["tags"] == ["alpha", "beta"]
