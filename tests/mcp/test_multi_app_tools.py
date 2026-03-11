@@ -280,7 +280,7 @@ class TestMultiAppTools:
         graphql_mutation_tool = tools.get("graphql_mutation")
 
         result = await graphql_mutation_tool.fn(
-            mutation='mutation { create_shop_product(name: "Test", price: 10) { id name } }', app_name="shop"
+            mutation='mutation { create_shop_product(name: "Test", description: "A product") { id name } }', app_name="shop"
         )
 
         assert result["success"] is True
