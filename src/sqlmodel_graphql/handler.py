@@ -209,12 +209,17 @@ class GraphQLHandler:
                                 selection, variables, method, entity, entity_names
                             )
 
-                            # Add query_meta if available
-                            # For queries: always pass query_meta
+                            # Add query_meta if available and method accepts it
+                            # For queries: pass query_meta if method has the parameter
                             # For mutations: only pass query_meta if return type is an entity
                             if field_name in parsed_meta:
+                                func = method.__func__ if hasattr(method, "__func__") else method
+                                sig = inspect.signature(func)
+                                accepts_query_meta = "query_meta" in sig.parameters
+
                                 if op_type == "query":
-                                    args["query_meta"] = parsed_meta[field_name]
+                                    if accepts_query_meta:
+                                        args["query_meta"] = parsed_meta[field_name]
                                 elif op_type == "mutation":
                                     from sqlmodel_graphql.utils.type_utils import (
                                         get_return_entity_type,
@@ -223,7 +228,7 @@ class GraphQLHandler:
                                     return_entity = get_return_entity_type(
                                         method, self.entities
                                     )
-                                    if return_entity is not None:
+                                    if return_entity is not None and accepts_query_meta:
                                         args["query_meta"] = parsed_meta[field_name]
 
                             # Execute the method
