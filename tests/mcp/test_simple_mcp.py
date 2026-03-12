@@ -1,0 +1,343 @@
+"""Tests for simplified MCP server configuration."""
+
+from __future__ import annotations
+
+import inspect
+
+import pytest
+from sqlmodel import Field, SQLModel
+
+from sqlmodel_graphql import mutation, query
+from sqlmodel_graphql.mcp import config_simple_mcp_server
+from sqlmodel_graphql.mcp.managers.single_app_manager import SingleAppManager
+from sqlmodel_graphql.types import QueryMeta
+
+# Check if mcp module is available
+try:
+    import mcp  # noqa: F401
+
+    HAS_MCP = True
+except ImportError:
+    HAS_MCP = False
+
+
+# Mock entities for testing (not test classes)
+class SimpleMCPMockBaseEntity(SQLModel):
+    """Base class for mock test entities."""
+
+    __test__ = False  # Tell pytest this is not a test class
+
+
+class SimpleMCPMockUser(SimpleMCPMockBaseEntity, table=True):
+    """Mock user entity for testing."""
+
+    __test__ = False
+    __tablename__ = "simple_mcp_mock_user"  # Unique table name to avoid conflicts
+
+    id: int | None = Field(default=None, primary_key=True)
+    name: str
+    email: str
+
+    @query
+    async def get_users(cls, limit: int = 10, query_meta: QueryMeta | None = None) -> list[SimpleMCPMockUser]:
+        """Get all mock users."""
+        # Return mock data
+        # Note: limit might be passed as string due to GraphQL argument conversion
+        limit_int = int(limit) if isinstance(limit, str) else limit
+        users = [
+            SimpleMCPMockUser(id=1, name="Alice", email="alice@example.com"),
+            SimpleMCPMockUser(id=2, name="Bob", email="bob@example.com"),
+            SimpleMCPMockUser(id=3, name="Charlie", email="charlie@example.com"),
+        ]
+        return users[:limit_int]
+
+    @query
+    async def get_user(cls, id: int, query_meta: QueryMeta | None = None) -> SimpleMCPMockUser | None:
+        """Get a mock user by ID."""
+        return SimpleMCPMockUser(id=id, name="Test User", email="test@example.com")
+
+    @mutation
+    async def create_user(cls, name: str, email: str, query_meta: QueryMeta | None = None) -> SimpleMCPMockUser:
+        """Create a new mock user."""
+        return SimpleMCPMockUser(id=99, name=name, email=email)
+
+
+class TestSingleAppManager:
+    """Test cases for SingleAppManager."""
+
+    def test_init_with_base_entity(self) -> None:
+        """Test SingleAppManager initialization."""
+        manager = SingleAppManager(base=SimpleMCPMockBaseEntity)
+
+        assert manager.handler is not None
+        assert manager.tracer is not None
+        assert manager.sdl_generator is not None
+
+    def test_init_with_description(self) -> None:
+        """Test initialization with description."""
+        manager = SingleAppManager(base=SimpleMCPMockBaseEntity, description="Test API")
+
+        assert manager.handler is not None
+        # Description is passed to SDLGenerator
+        assert manager.handler._sdl_generator._query_description == "Test API"
+        assert manager.handler._sdl_generator._mutation_description == "Test API"
+
+    def test_entity_names_property(self) -> None:
+        """Test entity_names property."""
+        manager = SingleAppManager(base=SimpleMCPMockBaseEntity)
+
+        entity_names = manager.entity_names
+
+        assert isinstance(entity_names, set)
+        assert "SimpleMCPMockUser" in entity_names
+
+
+@pytest.mark.skipif(not HAS_MCP, reason="mcp package not installed")
+class TestGetSchema:
+    """Test cases for get_schema tool."""
+
+    def test_get_schema_returns_sdl(self) -> None:
+        """Test get_schema returns SDL format."""
+        mcp = config_simple_mcp_server(base=SimpleMCPMockBaseEntity)
+        tools = mcp._tool_manager._tools
+        get_schema_tool = tools.get("get_schema")
+
+        result = get_schema_tool.fn()
+
+        assert result["success"] is True
+        assert "sdl" in result["data"]
+        assert "type Query" in result["data"]["sdl"]
+
+    def test_get_schema_includes_mutations(self) -> None:
+        """Test get_schema includes mutations."""
+        mcp = config_simple_mcp_server(base=SimpleMCPMockBaseEntity)
+        tools = mcp._tool_manager._tools
+        get_schema_tool = tools.get("get_schema")
+
+        result = get_schema_tool.fn()
+
+        assert result["success"] is True
+        assert "type Mutation" in result["data"]["sdl"]
+
+
+@pytest.mark.skipif(not HAS_MCP, reason="mcp package not installed")
+class TestGraphQLQuery:
+    """Test cases for graphql_query tool."""
+
+    @pytest.mark.asyncio
+    async def test_graphql_query_with_valid_query(self) -> None:
+        """Test graphql_query with valid query."""
+        mcp = config_simple_mcp_server(base=SimpleMCPMockBaseEntity)
+        tools = mcp._tool_manager._tools
+        graphql_query_tool = tools.get("graphql_query")
+
+        result = await graphql_query_tool.fn(
+            query="{ simpleMCPMockUserGetUsers(limit: 1) { id name } }"
+        )
+
+        assert result["success"] is True
+        assert "simpleMCPMockUserGetUsers" in result["data"]
+
+    @pytest.mark.asyncio
+    async def test_graphql_query_with_invalid_syntax(self) -> None:
+        """Test graphql_query with invalid syntax."""
+        mcp = config_simple_mcp_server(base=SimpleMCPMockBaseEntity)
+        tools = mcp._tool_manager._tools
+        graphql_query_tool = tools.get("graphql_query")
+
+        result = await graphql_query_tool.fn(query="{ invalid syntax }")
+
+        assert result["success"] is False
+        assert "error" in result
+        assert result["error_type"] == "query_execution_error"
+
+    @pytest.mark.asyncio
+    async def test_graphql_query_with_empty_query(self) -> None:
+        """Test graphql_query with empty query."""
+        mcp = config_simple_mcp_server(base=SimpleMCPMockBaseEntity)
+        tools = mcp._tool_manager._tools
+        graphql_query_tool = tools.get("graphql_query")
+
+        result = await graphql_query_tool.fn(query="")
+
+        assert result["success"] is False
+        assert result["error_type"] == "missing_required_field"
+
+    @pytest.mark.asyncio
+    async def test_graphql_query_with_none_query(self) -> None:
+        """Test graphql_query with None query."""
+        mcp = config_simple_mcp_server(base=SimpleMCPMockBaseEntity)
+        tools = mcp._tool_manager._tools
+        graphql_query_tool = tools.get("graphql_query")
+
+        result = await graphql_query_tool.fn(query=None)
+
+        assert result["success"] is False
+        assert result["error_type"] == "missing_required_field"
+
+    @pytest.mark.asyncio
+    async def test_graphql_query_with_get_by_id(self) -> None:
+        """Test graphql_query with get by ID."""
+        mcp = config_simple_mcp_server(base=SimpleMCPMockBaseEntity)
+        tools = mcp._tool_manager._tools
+        graphql_query_tool = tools.get("graphql_query")
+
+        result = await graphql_query_tool.fn(
+            query="{ simpleMCPMockUserGetUser(id: 1) { id name email } }"
+        )
+
+        assert result["success"] is True
+        assert "simpleMCPMockUserGetUser" in result["data"]
+
+
+@pytest.mark.skipif(not HAS_MCP, reason="mcp package not installed")
+class TestGraphQLMutation:
+    """Test cases for graphql_mutation tool."""
+
+    @pytest.mark.asyncio
+    async def test_graphql_mutation_create(self) -> None:
+        """Test graphql_mutation with create mutation."""
+        mcp = config_simple_mcp_server(base=SimpleMCPMockBaseEntity)
+        tools = mcp._tool_manager._tools
+        graphql_mutation_tool = tools.get("graphql_mutation")
+
+        result = await graphql_mutation_tool.fn(
+            mutation='mutation { simpleMCPMockUserCreateUser(name: "Test", email: "test@example.com") { id name } }'
+        )
+
+        assert result["success"] is True
+        assert "simpleMCPMockUserCreateUser" in result["data"]
+        assert result["data"]["simpleMCPMockUserCreateUser"]["name"] == "Test"
+
+    @pytest.mark.asyncio
+    async def test_graphql_mutation_with_invalid_syntax(self) -> None:
+        """Test graphql_mutation with invalid syntax."""
+        mcp = config_simple_mcp_server(base=SimpleMCPMockBaseEntity)
+        tools = mcp._tool_manager._tools
+        graphql_mutation_tool = tools.get("graphql_mutation")
+
+        result = await graphql_mutation_tool.fn(mutation="mutation { invalid }")
+
+        assert result["success"] is False
+        assert result["error_type"] == "mutation_execution_error"
+
+    @pytest.mark.asyncio
+    async def test_graphql_mutation_with_empty_mutation(self) -> None:
+        """Test graphql_mutation with empty mutation."""
+        mcp = config_simple_mcp_server(base=SimpleMCPMockBaseEntity)
+        tools = mcp._tool_manager._tools
+        graphql_mutation_tool = tools.get("graphql_mutation")
+
+        result = await graphql_mutation_tool.fn(mutation="")
+
+        assert result["success"] is False
+        assert result["error_type"] == "missing_required_field"
+
+    @pytest.mark.asyncio
+    async def test_graphql_mutation_with_none_mutation(self) -> None:
+        """Test graphql_mutation with None mutation."""
+        mcp = config_simple_mcp_server(base=SimpleMCPMockBaseEntity)
+        tools = mcp._tool_manager._tools
+        graphql_mutation_tool = tools.get("graphql_mutation")
+
+        result = await graphql_mutation_tool.fn(mutation=None)
+
+        assert result["success"] is False
+        assert result["error_type"] == "missing_required_field"
+
+
+@pytest.mark.skipif(not HAS_MCP, reason="mcp package not installed")
+class TestConfigSimpleMCPServer:
+    """Test cases for config_simple_mcp_server function."""
+
+    def test_config_simple_mcp_server_creation(self) -> None:
+        """Test creating simple MCP server."""
+        mcp = config_simple_mcp_server(
+            base=SimpleMCPMockBaseEntity, name="Test API", desc="Test Description"
+        )
+
+        assert mcp is not None
+        assert mcp.name == "Test API"
+
+    def test_config_simple_mcp_server_with_defaults(self) -> None:
+        """Test creating simple MCP server with defaults."""
+        mcp = config_simple_mcp_server(base=SimpleMCPMockBaseEntity)
+
+        assert mcp.name == "SQLModel GraphQL API"
+
+    def test_config_simple_mcp_server_tools_registered(self) -> None:
+        """Test that only 3 tools are registered."""
+        mcp = config_simple_mcp_server(base=SimpleMCPMockBaseEntity)
+        tools = mcp._tool_manager._tools
+
+        # Should only have 3 tools
+        assert len(tools) == 3
+        assert "get_schema" in tools
+        assert "graphql_query" in tools
+        assert "graphql_mutation" in tools
+
+        # Should NOT have multi-app tools
+        assert "list_apps" not in tools
+        assert "list_queries" not in tools
+        assert "list_mutations" not in tools
+        assert "get_query_schema" not in tools
+        assert "get_mutation_schema" not in tools
+
+    def test_config_simple_mcp_server_no_app_name_parameter(self) -> None:
+        """Test that tools do not require app_name parameter."""
+        mcp = config_simple_mcp_server(base=SimpleMCPMockBaseEntity)
+        tools = mcp._tool_manager._tools
+
+        # Check graphql_query tool signature
+        graphql_query_tool = tools.get("graphql_query")
+        sig = inspect.signature(graphql_query_tool.fn)
+        params = list(sig.parameters.keys())
+
+        assert "query" in params
+        assert "app_name" not in params
+
+        # Check graphql_mutation tool signature
+        graphql_mutation_tool = tools.get("graphql_mutation")
+        sig = inspect.signature(graphql_mutation_tool.fn)
+        params = list(sig.parameters.keys())
+
+        assert "mutation" in params
+        assert "app_name" not in params
+
+
+@pytest.mark.skipif(not HAS_MCP, reason="mcp package not installed")
+class TestSimpleMCPIntegration:
+    """Integration tests for simplified MCP server."""
+
+    @pytest.mark.asyncio
+    async def test_full_workflow(self) -> None:
+        """Test full workflow: get schema -> query -> mutation."""
+        mcp = config_simple_mcp_server(base=SimpleMCPMockBaseEntity)
+        tools = mcp._tool_manager._tools
+
+        # Step 1: Get schema
+        get_schema_tool = tools.get("get_schema")
+        schema_result = get_schema_tool.fn()
+
+        assert schema_result["success"] is True
+        assert "type Query" in schema_result["data"]["sdl"]
+        assert "type Mutation" in schema_result["data"]["sdl"]
+
+        # Step 2: Execute query
+        graphql_query_tool = tools.get("graphql_query")
+        query_result = await graphql_query_tool.fn(
+            query="{ simpleMCPMockUserGetUsers(limit: 2) { id name } }"
+        )
+
+        assert query_result["success"] is True
+        assert "simpleMCPMockUserGetUsers" in query_result["data"]
+
+        # Step 3: Execute mutation
+        graphql_mutation_tool = tools.get("graphql_mutation")
+        mutation_result = await graphql_mutation_tool.fn(
+            mutation='mutation { simpleMCPMockUserCreateUser(name: "New User", email: "new@example.com") { id name } }'
+        )
+
+        assert mutation_result["success"] is True
+        assert "simpleMCPMockUserCreateUser" in mutation_result["data"]
+        assert mutation_result["data"]["simpleMCPMockUserCreateUser"]["name"] == "New User"
