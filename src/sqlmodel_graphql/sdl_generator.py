@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any, get_args, get_origin, get_type_hints
 from sqlmodel import SQLModel
 
 from sqlmodel_graphql.type_converter import TypeConverter
+from sqlmodel_graphql.utils.naming import to_graphql_field_name
 
 if TYPE_CHECKING:
     pass
@@ -198,7 +199,11 @@ class SDLGenerator:
             for name in dir(entity):
                 try:
                     attr = getattr(entity, name)
-                    if callable(attr) and hasattr(attr, "_graphql_query"):
+                    if not callable(attr):
+                        continue
+                    # Check for _graphql_query on the function (classmethod wraps it)
+                    func = attr.__func__ if hasattr(attr, "__func__") else attr
+                    if hasattr(func, "_graphql_query"):
                         field_def = self._method_to_graphql_field(attr, entity)
                         fields.append(f"  {field_def}")
                 except Exception:
@@ -214,7 +219,11 @@ class SDLGenerator:
             for name in dir(entity):
                 try:
                     attr = getattr(entity, name)
-                    if callable(attr) and hasattr(attr, "_graphql_mutation"):
+                    if not callable(attr):
+                        continue
+                    # Check for _graphql_mutation on the function (classmethod wraps it)
+                    func = attr.__func__ if hasattr(attr, "__func__") else attr
+                    if hasattr(func, "_graphql_mutation"):
                         field_def = self._method_to_graphql_field(attr, entity)
                         fields.append(f"  {field_def}")
                 except Exception:
@@ -227,17 +236,11 @@ class SDLGenerator:
         # Get the underlying function from classmethod
         func = method.__func__ if hasattr(method, "__func__") else method
 
-        # Get GraphQL name
-        gql_name = getattr(func, "_graphql_query_name", None) or getattr(
-            func, "_graphql_mutation_name", None
-        )
-        if gql_name is None:
-            gql_name = func.__name__
+        # Generate GraphQL field name: entityName + MethodName
+        gql_name = to_graphql_field_name(entity.__name__, func.__name__)
 
-        # Get description
-        description = getattr(func, "_graphql_query_description", None) or getattr(
-            func, "_graphql_mutation_description", None
-        )
+        # Get description from docstring
+        description = func.__doc__
 
         # Get type hints from the function's module context
         # Include entity in localns to resolve forward references
@@ -328,7 +331,7 @@ class SDLGenerator:
         """Find the method and entity for a given operation name.
 
         Args:
-            operation_name: Name of the GraphQL operation (e.g., "users").
+            operation_name: Name of the GraphQL operation (e.g., "userGetAll").
             operation_type: "Query" or "Mutation".
 
         Returns:
@@ -337,9 +340,6 @@ class SDLGenerator:
         decorator_attr = (
             "_graphql_query" if operation_type == "Query" else "_graphql_mutation"
         )
-        name_attr = (
-            "_graphql_query_name" if operation_type == "Query" else "_graphql_mutation_name"
-        )
 
         for entity in self.entities:
             for name in dir(entity):
@@ -347,10 +347,8 @@ class SDLGenerator:
                     attr = getattr(entity, name)
                     if callable(attr) and hasattr(attr, decorator_attr):
                         func = attr.__func__ if hasattr(attr, "__func__") else attr
-                        gql_name = getattr(func, name_attr, None)
-                        # If no explicit name was set, use the method name
-                        if gql_name is None:
-                            gql_name = func.__name__
+                        # Generate GraphQL field name and compare
+                        gql_name = to_graphql_field_name(entity.__name__, func.__name__)
                         if gql_name == operation_name:
                             return (attr, entity)
                 except Exception:

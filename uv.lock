@@ -1103,8 +1103,11 @@ name = "sqlmodel-graphql"
 version = "0.7.1"
 source = { editable = "." }
 dependencies = [
+    { name = "fastapi" },
     { name = "graphql-core" },
+    { name = "greenlet" },
     { name = "sqlmodel" },
+    { name = "uvicorn" },
 ]
 
 [package.optional-dependencies]
@@ -1139,8 +1142,10 @@ dev = [
 requires-dist = [
     { name = "aiosqlite", marker = "extra == 'demo'", specifier = ">=0.19.0" },
     { name = "aiosqlite", marker = "extra == 'dev'", specifier = ">=0.19.0" },
+    { name = "fastapi", specifier = ">=0.135.1" },
     { name = "fastapi", marker = "extra == 'demo'", specifier = ">=0.100.0" },
     { name = "graphql-core", specifier = ">=3.2.0" },
+    { name = "greenlet", specifier = ">=3.3.2" },
     { name = "greenlet", marker = "extra == 'demo'", specifier = ">=3.3.2" },
     { name = "greenlet", marker = "extra == 'dev'", specifier = ">=3.3.2" },
     { name = "mcp", marker = "extra == 'mcp'", specifier = ">=1.0.0" },
@@ -1149,6 +1154,7 @@ requires-dist = [
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.21.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.1.0" },
     { name = "sqlmodel", specifier = ">=0.0.14" },
+    { name = "uvicorn", specifier = ">=0.41.0" },
     { name = "uvicorn", marker = "extra == 'demo'", specifier = ">=0.23.0" },
 ]
 provides-extras = ["dev", "demo", "mcp"]

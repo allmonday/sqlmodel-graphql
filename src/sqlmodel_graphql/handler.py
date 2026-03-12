@@ -72,8 +72,9 @@ class GraphQLHandler:
         self._query_parser = QueryParser()
 
         # Scan for @query and @mutation methods
-        scanner = MethodScanner()
-        self._query_methods, self._mutation_methods = scanner.scan(self.entities)
+        self._scanner = MethodScanner()
+        self._query_methods, self._mutation_methods = self._scanner.scan(self.entities)
+        self._name_mapping = self._scanner.get_name_mapping()
 
         # Initialize introspection generator
         self._introspection_generator = IntrospectionGenerator(

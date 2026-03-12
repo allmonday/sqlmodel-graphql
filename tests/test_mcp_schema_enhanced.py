@@ -17,17 +17,17 @@ class TestEntity(SQLModel):
     name: str = Field(description="User's full name")
     email: str = Field(description="Unique email address")
 
-    @query(name="test_items", description="Get all items")
+    @query
     async def get_all(cls, limit: int = 10) -> list[TestEntity]:
-        """Fallback docstring for get_all."""
+        """Get all items."""
         return []
 
-    @query(name="test_item")  # No description, should use docstring
+    @query
     async def get_by_id(cls, id: int) -> TestEntity | None:
         """Get item by its unique identifier."""
         return None
 
-    @mutation(name="create_item")
+    @mutation
     async def create(cls, name: str, count: int = 1) -> TestEntity:
         """Create a new item."""
         return TestEntity(name=name)
@@ -76,28 +76,30 @@ class TestFieldDescriptions:
 class TestMethodDocstrings:
     """Test method docstring extraction."""
 
-    def test_decorator_description_takes_precedence(self) -> None:
-        """Decorator description should take precedence over docstring."""
+    def test_docstring_used_as_description(self) -> None:
+        """Docstring should be used as description."""
         handler = GraphQLHandler(base=SQLModel)
         handler.entities = [TestEntity]
         formatter = SchemaFormatter(handler)
         schema = formatter.get_schema_info()
 
+        # New naming: testEntityGetAll
         query = next(
-            (q for q in schema["queries"] if q["name"] == "test_items"), None
+            (q for q in schema["queries"] if q["name"] == "testEntityGetAll"), None
         )
         assert query is not None
-        assert query["description"] == "Get all items"  # From decorator
+        assert query["description"] == "Get all items."
 
-    def test_docstring_used_when_no_decorator_description(self) -> None:
-        """Docstring should be used when no decorator description."""
+    def test_docstring_used_for_get_by_id(self) -> None:
+        """Docstring should be used for get_by_id."""
         handler = GraphQLHandler(base=SQLModel)
         handler.entities = [TestEntity]
         formatter = SchemaFormatter(handler)
         schema = formatter.get_schema_info()
 
+        # New naming: testEntityGetById
         query = next(
-            (q for q in schema["queries"] if q["name"] == "test_item"), None
+            (q for q in schema["queries"] if q["name"] == "testEntityGetById"), None
         )
         assert query is not None
         assert query["description"] == "Get item by its unique identifier."
@@ -113,8 +115,9 @@ class TestArgumentDefaults:
         formatter = SchemaFormatter(handler)
         schema = formatter.get_schema_info()
 
+        # New naming: testEntityGetAll
         query = next(
-            (q for q in schema["queries"] if q["name"] == "test_items"), None
+            (q for q in schema["queries"] if q["name"] == "testEntityGetAll"), None
         )
         assert query is not None
 
@@ -131,8 +134,9 @@ class TestArgumentDefaults:
         formatter = SchemaFormatter(handler)
         schema = formatter.get_schema_info()
 
+        # New naming: testEntityGetById
         query = next(
-            (q for q in schema["queries"] if q["name"] == "test_item"), None
+            (q for q in schema["queries"] if q["name"] == "testEntityGetById"), None
         )
         assert query is not None
 

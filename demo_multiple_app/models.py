@@ -13,6 +13,7 @@ from sqlmodel import Field, Relationship, SQLModel, select
 
 from sqlmodel_graphql import QueryMeta, mutation, query
 
+
 # =============================================================================
 # Blog Application Models
 # =============================================================================
@@ -34,10 +35,8 @@ class User(BlogBaseEntity, table=True):
     # Relationships
     posts: list["Post"] = Relationship(back_populates="author")
 
-    @query(name="users", description="Get all users with optional limit")
-    async def get_all(
-        cls, limit: int = 10, query_meta: QueryMeta | None = None
-    ) -> list["User"]:
+    @query
+    async def get_users(cls, limit: int = 10, query_meta: QueryMeta | None = None) -> list["User"]:
         """Get all users with optional limit."""
         from .database import get_blog_session
 
@@ -48,8 +47,8 @@ class User(BlogBaseEntity, table=True):
             result = await session.exec(stmt)
             return list(result.all())
 
-    @query(name="user", description="Get a user by ID")
-    async def get_by_id(cls, id: int, query_meta: QueryMeta | None = None) -> Optional["User"]:
+    @query
+    async def get_user(cls, id: int, query_meta: QueryMeta | None = None) -> Optional["User"]:
         """Get a user by ID."""
         from .database import get_blog_session
 
@@ -60,8 +59,8 @@ class User(BlogBaseEntity, table=True):
             result = await session.exec(stmt)
             return result.first()
 
-    @mutation(name="create_user", description="Create a new user")
-    async def create(cls, name: str, email: str, query_meta: QueryMeta) -> "User":
+    @mutation
+    async def create_user(cls, name: str, email: str, query_meta: QueryMeta | None = None) -> "User":
         """Create a new user."""
         from .database import get_blog_session
 
@@ -73,7 +72,8 @@ class User(BlogBaseEntity, table=True):
 
             # Re-query with query_meta to load relationships
             stmt = select(cls).where(cls.id == user.id)
-            stmt = stmt.options(*query_meta.to_options(cls))
+            if query_meta:
+                stmt = stmt.options(*query_meta.to_options(cls))
             result = await session.exec(stmt)
             return result.first()
 
@@ -89,10 +89,8 @@ class Post(BlogBaseEntity, table=True):
     # Relationships
     author: User | None = Relationship(back_populates="posts")
 
-    @query(name="posts", description="Get all posts with optional limit")
-    async def get_all(
-        cls, limit: int = 10, query_meta: QueryMeta | None = None
-    ) -> list["Post"]:
+    @query
+    async def get_posts(cls, limit: int = 10, query_meta: QueryMeta | None = None) -> list["Post"]:
         """Get all posts with optional limit."""
         from .database import get_blog_session
 
@@ -103,8 +101,8 @@ class Post(BlogBaseEntity, table=True):
             result = await session.exec(stmt)
             return list(result.all())
 
-    @query(name="post", description="Get a post by ID")
-    async def get_by_id(cls, id: int, query_meta: QueryMeta | None = None) -> Optional["Post"]:
+    @query
+    async def get_post(cls, id: int, query_meta: QueryMeta | None = None) -> Optional["Post"]:
         """Get a post by ID."""
         from .database import get_blog_session
 
@@ -115,9 +113,9 @@ class Post(BlogBaseEntity, table=True):
             result = await session.exec(stmt)
             return result.first()
 
-    @mutation(name="create_post", description="Create a new post")
-    async def create(
-        cls, title: str, content: str, author_id: int, query_meta: QueryMeta
+    @mutation
+    async def create_post(
+        cls, title: str, content: str, author_id: int, query_meta: QueryMeta | None = None
     ) -> "Post":
         """Create a new post."""
         from .database import get_blog_session
@@ -135,7 +133,8 @@ class Post(BlogBaseEntity, table=True):
 
             # Re-query with query_meta to load relationships
             stmt = select(cls).where(cls.id == post.id)
-            stmt = stmt.options(*query_meta.to_options(cls))
+            if query_meta:
+                stmt = stmt.options(*query_meta.to_options(cls))
             result = await session.exec(stmt)
             return result.first()
 
@@ -162,10 +161,8 @@ class Product(ShopBaseEntity, table=True):
     # Relationships
     order_items: list["OrderItem"] = Relationship(back_populates="product")
 
-    @query(name="products", description="Get all products with optional limit")
-    async def get_all(
-        cls, limit: int = 10, query_meta: QueryMeta | None = None
-    ) -> list["Product"]:
+    @query
+    async def get_products(cls, limit: int = 10, query_meta: QueryMeta | None = None) -> list["Product"]:
         """Get all products with optional limit."""
         from .database import get_shop_session
 
@@ -176,8 +173,8 @@ class Product(ShopBaseEntity, table=True):
             result = await session.exec(stmt)
             return list(result.all())
 
-    @query(name="product", description="Get a product by ID")
-    async def get_by_id(cls, id: int, query_meta: QueryMeta | None = None) -> Optional["Product"]:
+    @query
+    async def get_product(cls, id: int, query_meta: QueryMeta | None = None) -> Optional["Product"]:
         """Get a product by ID."""
         from .database import get_shop_session
 
@@ -188,9 +185,9 @@ class Product(ShopBaseEntity, table=True):
             result = await session.exec(stmt)
             return result.first()
 
-    @mutation(name="create_product", description="Create a new product")
-    async def create(
-        cls, name: str, price: float, stock: int = 0, query_meta: QueryMeta = None
+    @mutation
+    async def create_product(
+        cls, name: str, price: float, stock: int = 0, query_meta: QueryMeta | None = None
     ) -> "Product":
         """Create a new product."""
         from .database import get_shop_session
@@ -219,10 +216,8 @@ class Order(ShopBaseEntity, table=True):
     # Relationships
     items: list["OrderItem"] = Relationship(back_populates="order")
 
-    @query(name="orders", description="Get all orders with optional limit")
-    async def get_all(
-        cls, limit: int = 10, query_meta: QueryMeta | None = None
-    ) -> list["Order"]:
+    @query
+    async def get_orders(cls, limit: int = 10, query_meta: QueryMeta | None = None) -> list["Order"]:
         """Get all orders with optional limit."""
         from .database import get_shop_session
 
@@ -233,8 +228,8 @@ class Order(ShopBaseEntity, table=True):
             result = await session.exec(stmt)
             return list(result.all())
 
-    @query(name="order", description="Get an order by ID")
-    async def get_by_id(cls, id: int, query_meta: QueryMeta | None = None) -> Optional["Order"]:
+    @query
+    async def get_order(cls, id: int, query_meta: QueryMeta | None = None) -> Optional["Order"]:
         """Get an order by ID."""
         from .database import get_shop_session
 
@@ -245,8 +240,8 @@ class Order(ShopBaseEntity, table=True):
             result = await session.exec(stmt)
             return result.first()
 
-    @mutation(name="create_order", description="Create a new order")
-    async def create(cls, customer_name: str, query_meta: QueryMeta) -> "Order":
+    @mutation
+    async def create_order(cls, customer_name: str, query_meta: QueryMeta | None = None) -> "Order":
         """Create a new order."""
         from .database import get_shop_session
 
@@ -258,7 +253,8 @@ class Order(ShopBaseEntity, table=True):
 
             # Re-query with query_meta to load relationships
             stmt = select(cls).where(cls.id == order.id)
-            stmt = stmt.options(*query_meta.to_options(cls))
+            if query_meta:
+                stmt = stmt.options(*query_meta.to_options(cls))
             result = await session.exec(stmt)
             return result.first()
 
@@ -276,9 +272,9 @@ class OrderItem(ShopBaseEntity, table=True):
     order: Order | None = Relationship(back_populates="items")
     product: Product | None = Relationship(back_populates="order_items")
 
-    @mutation(name="add_order_item", description="Add an item to an order")
-    async def create(
-        cls, order_id: int, product_id: int, quantity: int, query_meta: QueryMeta
+    @mutation
+    async def add_order_item(
+        cls, order_id: int, product_id: int, quantity: int, query_meta: QueryMeta | None = None
     ) -> "OrderItem":
         """Add an item to an order."""
         from .database import get_shop_session
@@ -320,6 +316,7 @@ class OrderItem(ShopBaseEntity, table=True):
 
             # Re-query with query_meta to load relationships
             stmt = select(cls).where(cls.id == order_item.id)
-            stmt = stmt.options(*query_meta.to_options(cls))
+            if query_meta:
+                stmt = stmt.options(*query_meta.to_options(cls))
             result = await session.exec(stmt)
             return result.first()

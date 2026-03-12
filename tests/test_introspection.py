@@ -27,15 +27,15 @@ class IntrospectionUser(IntrospectionBase, table=True):
     email: str | None = None
     status: Status = Status.ACTIVE
 
-    @query(name="users")
+    @query
     def get_users(cls, limit: int = 10) -> list["IntrospectionUser"]:
         return []
 
-    @query(name="user")
+    @query
     def get_user(cls, id: int) -> Optional["IntrospectionUser"]:
         return None
 
-    @mutation(name="createUser")
+    @mutation
     def create_user(cls, name: str, email: str | None = None) -> "IntrospectionUser":
         return cls(name=name, email=email)
 
@@ -112,8 +112,9 @@ class TestIntrospectionGenerator:
         assert query_type["kind"] == "OBJECT"
 
         field_names = [f["name"] for f in query_type["fields"]]
-        assert "users" in field_names
-        assert "user" in field_names
+        # New naming: introspectionUserGetUsers, introspectionUserGetUser
+        assert "introspectionUserGetUsers" in field_names
+        assert "introspectionUserGetUser" in field_names
 
     def test_mutation_type(self, generator: IntrospectionGenerator):
         """Test that Mutation type is generated with correct fields."""
@@ -124,14 +125,15 @@ class TestIntrospectionGenerator:
         assert mutation_type["kind"] == "OBJECT"
 
         field_names = [f["name"] for f in mutation_type["fields"]]
-        assert "createUser" in field_names
+        # New naming: introspectionUserCreateUser
+        assert "introspectionUserCreateUser" in field_names
 
     def test_field_arguments(self, generator: IntrospectionGenerator):
         """Test that field arguments are generated correctly."""
         schema = generator.generate()
 
         query_type = next((t for t in schema["types"] if t["name"] == "Query"), None)
-        users_field = next((f for f in query_type["fields"] if f["name"] == "users"), None)
+        users_field = next((f for f in query_type["fields"] if f["name"] == "introspectionUserGetUsers"), None)
 
         assert users_field is not None
         arg_names = [a["name"] for a in users_field["args"]]
@@ -142,7 +144,7 @@ class TestIntrospectionGenerator:
         schema = generator.generate()
 
         query_type = next((t for t in schema["types"] if t["name"] == "Query"), None)
-        users_field = next((f for f in query_type["fields"] if f["name"] == "users"), None)
+        users_field = next((f for f in query_type["fields"] if f["name"] == "introspectionUserGetUsers"), None)
 
         # users returns list[User], so type should be NON_NULL(LIST(NON_NULL(OBJECT(User))))
         return_type = users_field["type"]
@@ -154,7 +156,7 @@ class TestIntrospectionGenerator:
         schema = generator.generate()
 
         query_type = next((t for t in schema["types"] if t["name"] == "Query"), None)
-        user_field = next((f for f in query_type["fields"] if f["name"] == "user"), None)
+        user_field = next((f for f in query_type["fields"] if f["name"] == "introspectionUserGetUser"), None)
 
         # user returns Optional[User], so type should be OBJECT (not NON_NULL)
         return_type = user_field["type"]

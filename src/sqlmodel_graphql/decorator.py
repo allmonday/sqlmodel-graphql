@@ -3,33 +3,17 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import overload
 
 
-@overload
-def query(func: Callable) -> classmethod: ...
-
-
-@overload
-def query(
-    *, name: str | None = None, description: str | None = None
-) -> Callable[[Callable], classmethod]: ...
-
-
-def query(
-    name_or_func: Callable | None = None,
-    *,
-    name: str | None = None,
-    description: str | None = None,
-) -> classmethod | Callable[[Callable], classmethod]:
+def query(func: Callable) -> classmethod:
     """Mark a method as a GraphQL query.
 
     This decorator automatically converts the method to a classmethod.
+    The GraphQL field name is generated as: `{entityName}{methodName}`.
+    The description is taken from the method's docstring.
 
     Args:
-        name_or_func: Function object (when called without parameters) or None.
-        name: GraphQL query name (defaults to camelCase conversion of method name).
-        description: Description text in GraphQL Schema.
+        func: The method to decorate.
 
     Returns:
         A classmethod decorator.
@@ -43,62 +27,40 @@ def query(
             id: int
             name: str
 
-            @query(name='users', description='Get all users')
+            @query
             async def get_all(cls, limit: int = 10) -> list['User']:
+                \"\"\"Get all users with optional limit.\"\"\"
                 return await fetch_users(limit)
+
+            @query
+            async def get_by_id(cls, id: int) -> Optional['User']:
+                \"\"\"Get a user by ID.\"\"\"
+                return await fetch_user(id)
         ```
 
     This generates the following GraphQL Schema:
         ```graphql
         type Query {
-            users(limit: Int): [User!]!
+            \"\"\"Get all users with optional limit.\"\"\"
+            userGetAll(limit: Int): [User!]!
+            \"\"\"Get a user by ID.\"\"\"
+            userGetById(id: Int!): User
         }
         ```
     """
-    # Handle @query without parameters
-    if callable(name_or_func):
-        func = name_or_func
-        func._graphql_query = True  # type: ignore[attr-defined]
-        func._graphql_query_name = name  # type: ignore[attr-defined]
-        func._graphql_query_description = description  # type: ignore[attr-defined]
-        return classmethod(func)
-
-    # Handle @query(name='...', description='...')
-    query_name = name or name_or_func
-
-    def decorator(func: Callable) -> classmethod:
-        func._graphql_query = True  # type: ignore[attr-defined]
-        func._graphql_query_name = query_name  # type: ignore[attr-defined]
-        func._graphql_query_description = description  # type: ignore[attr-defined]
-        return classmethod(func)
-
-    return decorator
+    func._graphql_query = True  # type: ignore[attr-defined]
+    return classmethod(func)
 
 
-@overload
-def mutation(func: Callable) -> classmethod: ...
-
-
-@overload
-def mutation(
-    *, name: str | None = None, description: str | None = None
-) -> Callable[[Callable], classmethod]: ...
-
-
-def mutation(
-    name_or_func: Callable | None = None,
-    *,
-    name: str | None = None,
-    description: str | None = None,
-) -> classmethod | Callable[[Callable], classmethod]:
+def mutation(func: Callable) -> classmethod:
     """Mark a method as a GraphQL mutation.
 
     This decorator automatically converts the method to a classmethod.
+    The GraphQL field name is generated as: `{entityName}{methodName}`.
+    The description is taken from the method's docstring.
 
     Args:
-        name_or_func: Function object (when called without parameters) or None.
-        name: GraphQL mutation name (defaults to camelCase conversion of method name).
-        description: Description text in GraphQL Schema.
+        func: The method to decorate.
 
     Returns:
         A classmethod decorator.
@@ -113,33 +75,26 @@ def mutation(
             name: str
             email: str
 
-            @mutation(name='createUser', description='Create a new user')
+            @mutation
             async def create(cls, name: str, email: str) -> 'User':
+                \"\"\"Create a new user.\"\"\"
                 return await create_user(name, email)
+
+            @mutation
+            async def update_email(cls, id: int, email: str) -> 'User':
+                \"\"\"Update user's email.\"\"\"
+                return await update_user_email(id, email)
         ```
 
     This generates the following GraphQL Schema:
         ```graphql
         type Mutation {
-            createUser(name: String!, email: String!): User!
+            \"\"\"Create a new user.\"\"\"
+            userCreate(name: String!, email: String!): User!
+            \"\"\"Update user's email.\"\"\"
+            userUpdateEmail(id: Int!, email: String!): User!
         }
         ```
     """
-    # Handle @mutation without parameters
-    if callable(name_or_func):
-        func = name_or_func
-        func._graphql_mutation = True  # type: ignore[attr-defined]
-        func._graphql_mutation_name = name  # type: ignore[attr-defined]
-        func._graphql_mutation_description = description  # type: ignore[attr-defined]
-        return classmethod(func)
-
-    # Handle @mutation(name='...', description='...')
-    mutation_name = name or name_or_func
-
-    def decorator(func: Callable) -> classmethod:
-        func._graphql_mutation = True  # type: ignore[attr-defined]
-        func._graphql_mutation_name = mutation_name  # type: ignore[attr-defined]
-        func._graphql_mutation_description = description  # type: ignore[attr-defined]
-        return classmethod(func)
-
-    return decorator
+    func._graphql_mutation = True  # type: ignore[attr-defined]
+    return classmethod(func)

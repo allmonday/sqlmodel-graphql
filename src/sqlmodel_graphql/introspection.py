@@ -255,12 +255,8 @@ class IntrospectionGenerator:
         """Build introspection data for a query/mutation field."""
         func = method.__func__ if hasattr(method, "__func__") else method
 
-        # Get description: 优先使用装饰器描述， 否则使用 docstring
-        description = getattr(func, "_graphql_query_description", None) or getattr(
-            func, "_graphql_mutation_description", None
-        )
-        if not description and func.__doc__:
-            description = func.__doc__.strip()
+        # Get description from docstring
+        description = func.__doc__.strip() if func.__doc__ else None
 
         # Get type hints
         try:

@@ -85,7 +85,7 @@ class TestSchemaFormatter:
             id: int = Field(primary_key=True)
             name: str
 
-            @query(name="test_users")
+            @query
             async def get_all(cls) -> list[TestUser]:
                 return []
 
@@ -100,7 +100,8 @@ class TestSchemaFormatter:
         # Check queries
         assert len(info["queries"]) > 0
         query_names = [q["name"] for q in info["queries"]]
-        assert "test_users" in query_names
+        # New naming: testUserGetAll
+        assert "testUserGetAll" in query_names
 
         # Check types
         assert len(info["types"]) > 0
@@ -123,7 +124,7 @@ class TestSchemaFormatter:
             title: str
             content: str
 
-            @query(name="test_posts")
+            @query
             async def get_all(cls) -> list[TestPost]:
                 return []
 
@@ -157,7 +158,7 @@ class TestSchemaFormatter:
             id: int = Field(primary_key=True)
             name: str
 
-            @query(name="test_item")
+            @query
             async def get_by_id(cls, item_id: int) -> TestItem | None:
                 return None
 
@@ -165,9 +166,9 @@ class TestSchemaFormatter:
         formatter = SchemaFormatter(handler)
         info = formatter.get_schema_info()
 
-        # Find test_item query
+        # Find testItemGetById query
         item_query = next(
-            (q for q in info["queries"] if q["name"] == "test_item"), None
+            (q for q in info["queries"] if q["name"] == "testItemGetById"), None
         )
         assert item_query is not None
 
@@ -199,7 +200,7 @@ class TestMCPServerCreation:
             id: int = Field(primary_key=True)
             name: str
 
-            @query(name="test_entities")
+            @query
             async def get_all(cls) -> list[TestEntity]:
                 return []
 
@@ -238,7 +239,7 @@ class TestListOperations:
             id: int = Field(primary_key=True)
             name: str
 
-            @query(name="test_users")
+            @query
             async def get_all(cls) -> list[TestUser]:
                 """Get all test users."""
                 return []
@@ -251,7 +252,8 @@ class TestListOperations:
         queries = tracer.list_operation_fields("Query")
 
         assert len(queries) == 1
-        assert queries[0]["name"] == "test_users"
+        # New naming: testUserGetAll
+        assert queries[0]["name"] == "testUserGetAll"
         assert queries[0]["description"] == "Get all test users."
 
     def test_list_queries_empty_when_no_queries(self) -> None:
@@ -288,7 +290,7 @@ class TestListOperations:
             id: int = Field(primary_key=True)
             name: str
 
-            @mutation(name="create_test_user")
+            @mutation
             async def create(cls, name: str) -> TestUser:
                 """Create a test user."""
                 return TestUser(id=1, name=name)
@@ -301,7 +303,8 @@ class TestListOperations:
         mutations = tracer.list_operation_fields("Mutation")
 
         assert len(mutations) == 1
-        assert mutations[0]["name"] == "create_test_user"
+        # New naming: testUserCreate
+        assert mutations[0]["name"] == "testUserCreate"
 
 
 class TestGetOperationSchema:
@@ -322,7 +325,7 @@ class TestGetOperationSchema:
             id: int = Field(primary_key=True)
             name: str
 
-            @query(name="test_user")
+            @query
             async def get_by_id(cls, user_id: int) -> TestUser | None:
                 """Get user by ID."""
                 return None
@@ -332,10 +335,11 @@ class TestGetOperationSchema:
         entity_names = {e.__name__ for e in handler.entities}
         tracer = TypeTracer(introspection, entity_names)
 
-        operation = tracer.get_operation_field("Query", "test_user")
+        # New naming: testUserGetById
+        operation = tracer.get_operation_field("Query", "testUserGetById")
 
         assert operation is not None
-        assert operation["name"] == "test_user"
+        assert operation["name"] == "testUserGetById"
         assert len(operation["args"]) == 1
         assert operation["args"][0]["name"] == "user_id"
 
@@ -464,7 +468,7 @@ class TestGetOperationSchema:
             id: int = Field(primary_key=True)
             name: str
 
-            @mutation(name="create_test_user")
+            @mutation
             async def create(cls, name: str) -> TestUser:
                 return TestUser(id=1, name=name)
 
@@ -473,10 +477,11 @@ class TestGetOperationSchema:
         entity_names = {e.__name__ for e in handler.entities}
         tracer = TypeTracer(introspection, entity_names)
 
-        operation = tracer.get_operation_field("Mutation", "create_test_user")
+        # New naming: testUserCreate
+        operation = tracer.get_operation_field("Mutation", "testUserCreate")
 
         assert operation is not None
-        assert operation["name"] == "create_test_user"
+        assert operation["name"] == "testUserCreate"
 
     def test_operation_with_no_arguments(self) -> None:
         """Test operation with no arguments."""
@@ -493,7 +498,7 @@ class TestGetOperationSchema:
             id: int = Field(primary_key=True)
             name: str
 
-            @query(name="all_test_users")
+            @query
             async def get_all(cls) -> list[TestUser]:
                 return []
 
@@ -502,7 +507,8 @@ class TestGetOperationSchema:
         entity_names = {e.__name__ for e in handler.entities}
         tracer = TypeTracer(introspection, entity_names)
 
-        operation = tracer.get_operation_field("Query", "all_test_users")
+        # New naming: testUserGetAll
+        operation = tracer.get_operation_field("Query", "testUserGetAll")
 
         assert operation is not None
         assert operation["args"] == []
@@ -526,7 +532,7 @@ class TestThreeLayerProgressiveDisclosure:
             id: int = Field(primary_key=True)
             name: str
 
-            @query(name="test_users")
+            @query
             async def get_all(cls, limit: int = 10) -> list[TestUser]:
                 """Get all test users."""
                 return []
@@ -539,12 +545,13 @@ class TestThreeLayerProgressiveDisclosure:
         # Layer 1: List queries
         queries = tracer.list_operation_fields("Query")
         assert len(queries) == 1
-        assert queries[0]["name"] == "test_users"
+        # New naming: testUserGetAll
+        assert queries[0]["name"] == "testUserGetAll"
 
         # Layer 2: Get query schema
-        operation = tracer.get_operation_field("Query", "test_users")
+        operation = tracer.get_operation_field("Query", "testUserGetAll")
         assert operation is not None
-        assert operation["name"] == "test_users"
+        assert operation["name"] == "testUserGetAll"
         assert operation["description"] == "Get all test users."
 
         # Note: Due to Python's forward reference limitations when classes are

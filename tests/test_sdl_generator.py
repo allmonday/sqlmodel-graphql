@@ -15,19 +15,17 @@ class UserForTest(SQLModel):
     name: str
     email: str
 
-    @query(name="users")
+    @query
     async def get_all(
         cls, limit: int = 10, query_meta: QueryMeta | None = None
     ) -> list["UserForTest"]:
         """Get all users with optional query optimization."""
-        # In real usage, query_meta would be used with QueryBuilder
-        # to optimize the database query
         return [
             UserForTest(id=1, name="Alice", email="alice@example.com"),
             UserForTest(id=2, name="Bob", email="bob@example.com"),
         ][:limit]
 
-    @query(name="user")
+    @query
     async def get_by_id(
         cls, id: int, query_meta: QueryMeta | None = None
     ) -> Optional["UserForTest"]:
@@ -38,10 +36,8 @@ class UserForTest(SQLModel):
         }
         return users.get(id)
 
-    @mutation(name="createUser")
-    async def create(
-        cls, name: str, email: str, query_meta: QueryMeta | None = None
-    ) -> "UserForTest":
+    @mutation
+    async def create(cls, name: str, email: str, query_meta: QueryMeta | None = None) -> "UserForTest":
         """Create a new user."""
         return UserForTest(id=3, name=name, email=email)
 
@@ -75,8 +71,9 @@ class TestSDLGenerator:
         sdl = generator.generate()
 
         assert "type Query" in sdl
-        assert "users(limit: Int): [UserForTest!]!" in sdl
-        assert "user(id: Int!): UserForTest" in sdl
+        # New naming: userForTestGetAll, userForTestGetById
+        assert "userForTestGetAll(limit: Int): [UserForTest!]!" in sdl
+        assert "userForTestGetById(id: Int!): UserForTest" in sdl
 
     def test_generate_mutation_type(self) -> None:
         """Test that Mutation type is generated correctly."""
@@ -84,7 +81,8 @@ class TestSDLGenerator:
         sdl = generator.generate()
 
         assert "type Mutation" in sdl
-        assert "createUser(name: String!, email: String!): UserForTest!" in sdl
+        # New naming: userForTestCreate
+        assert "userForTestCreate(name: String!, email: String!): UserForTest!" in sdl
 
     def test_snake_case_preserved(self) -> None:
         """Test that snake_case field names are preserved (no conversion to camelCase)."""
