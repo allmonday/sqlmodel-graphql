@@ -53,7 +53,7 @@ class User(BaseEntity, table=True):
     email: str
     posts: list["Post"] = Relationship(back_populates="author")
 
-    @query(name='users')
+    @query
     async def get_all(cls, limit: int = 10, query_meta: QueryMeta | None = None) -> list['User']:
         """Get all users with optional query optimization."""
         async with get_session() as session:
@@ -63,18 +63,21 @@ class User(BaseEntity, table=True):
                 stmt = stmt.options(*query_meta.to_options(cls))
             result = await session.exec(stmt)
             return list(result.all())
+    # Generates GraphQL field: userGetAll(limit: Int): [User!]!
 
-    @query(name='user')
+    @query
     async def get_by_id(cls, id: int, query_meta: QueryMeta | None = None) -> Optional['User']:
+        """Get a user by ID."""
         async with get_session() as session:
             stmt = select(cls).where(cls.id == id)
             if query_meta:
                 stmt = stmt.options(*query_meta.to_options(cls))
             result = await session.exec(stmt)
             return result.first()
+    # Generates GraphQL field: userGetById(id: Int!): User
 
-    @mutation(name='createUser')
-    async def create(cls, name: str, email: str, query_meta: QueryMeta) -> 'User':
+    @mutation
+    async def create(cls, name: str, email: str, query_meta: QueryMeta | None = None) -> 'User':
         """Create a new user. query_meta is injected for relationship loading."""
         async with get_session() as session:
             user = cls(name=name, email=email)
@@ -82,10 +85,13 @@ class User(BaseEntity, table=True):
             await session.commit()
             await session.refresh(user)
             # Re-query with query_meta to load relationships if requested
-            stmt = select(cls).where(cls.id == user.id)
-            stmt = stmt.options(*query_meta.to_options(cls))
-            result = await session.exec(stmt)
-            return result.first()
+            if query_meta:
+                stmt = select(cls).where(cls.id == user.id)
+                stmt = stmt.options(*query_meta.to_options(cls))
+                result = await session.exec(stmt)
+                return result.first()
+            return user
+    # Generates GraphQL field: userCreate(name: String!, email: String!): User!
 
 class Post(BaseEntity, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
@@ -101,9 +107,9 @@ The `query_meta` parameter is automatically injected by the framework to optimiz
 
 **How it works:**
 
-1. Framework parses GraphQL query: `{ users { name posts { title } } }`
+1. Framework parses GraphQL query: `{ userGetAll { name posts { title } } }`
 2. Creates QueryMeta with field selections and relationships
-3. Injects it into your `@query` method
+3. Injects it into your `@query` method (if the parameter exists)
 4. `query_meta.to_options(Entity)` generates optimized SQLAlchemy options
 
 **Benefits:**
@@ -115,14 +121,14 @@ The `query_meta` parameter is automatically injected by the framework to optimiz
 **Example transformation:**
 
 ```
-GraphQL Query:                    SQLAlchemy Optimization:
-────────────────                 ────────────────────────
-{ users {                         select(User).options(
-  name                              load_only(User.name),
-  posts {                           selectinload(User.posts).options(
-    title                             load_only(Post.title)
-  }                                 )
-}                                 )
+GraphQL Query:                         SQLAlchemy Optimization:
+────────────────                      ────────────────────────
+{ userGetAll {                         select(User).options(
+  name                                   load_only(User.name),
+  posts {                                selectinload(User.posts).options(
+    title                                  load_only(Post.title)
+  }                                      )
+}                                      )
 ```
 
 Without `query_meta`, loading 10 users with posts would execute:
@@ -136,7 +142,7 @@ With `query_meta`, it executes:
 **Usage Pattern:**
 
 ```python
-@query(name='users')
+@query
 async def get_users(cls, query_meta: QueryMeta | None = None) -> list['User']:
     async with get_session() as session:
         stmt = select(cls)
@@ -144,11 +150,12 @@ async def get_users(cls, query_meta: QueryMeta | None = None) -> list['User']:
             stmt = stmt.options(*query_meta.to_options(cls))
         result = await session.exec(stmt)
         return list(result.all())
+# Generates: userGetUsers: [User!]!
 ```
 
 **Key Points:**
 
-- `query_meta` is optional (`QueryMeta | None = None`)
+- `query_meta` is optional (`QueryMeta | None = None`) - only injected if the parameter exists
 - Always check `if query_meta:` before using
 - Works with nested relationships of any depth
 - For mutations, only injected when returning entity types (not scalars)
@@ -181,16 +188,20 @@ type Post {
   title: String!
   content: String!
   author_id: Int!
-  author: User!
+  author: User
 }
 
 type Query {
-  users(limit: Int): [User!]!
-  user(id: Int!): User
+  """Get all users with optional query optimization."""
+  userGetAll(limit: Int): [User!]!
+
+  """Get a user by ID."""
+  userGetById(id: Int!): User
 }
 
 type Mutation {
-  createUser(name: String!, email: String!): User!
+  """Create a new user. query_meta is injected for relationship loading."""
+  userCreate(name: String!, email: String!): User!
 }
 ```
 
@@ -205,7 +216,7 @@ handler = GraphQLHandler(base=BaseEntity)
 # Execute a GraphQL query
 result = await handler.execute("""
 {
-  users(limit: 5) {
+  userGetAll(limit: 5) {
     id
     name
     posts {
@@ -221,7 +232,7 @@ result = await handler.execute("""
 # Result includes nested relationships automatically:
 # {
 #   "data": {
-#     "users": [
+#     "userGetAll": [
 #       {
 #         "id": 1,
 #         "name": "Alice",
@@ -239,15 +250,19 @@ result = await handler.execute("""
 
 Turn your SQLModel entities into AI-ready tools with a single function call.
 
+### Simple MCP Server (Single App)
+
+For single-application scenarios with one database:
+
 ```python
-from sqlmodel_graphql.mcp import create_mcp_server
+from sqlmodel_graphql.mcp import config_simple_mcp_server
 from myapp.models import BaseEntity
 
-# Create MCP server from your base class
-# All SQLModel subclasses with @query/@mutation decorators are auto-discovered
-mcp = create_mcp_server(
+# Create simplified MCP server - only 3 tools, no app_name required
+mcp = config_simple_mcp_server(
     base=BaseEntity,
-    name="My Blog API"
+    name="My Blog API",
+    desc="Blog system with users and posts"
 )
 
 # Run for AI assistants (Claude Desktop, etc.)
@@ -255,110 +270,116 @@ mcp.run()  # stdio mode (default)
 # mcp.run(transport="streamable-http")  # HTTP mode
 ```
 
-### Available MCP Tools
+**Available Tools (3 tools):**
 
-The server exposes six tools with three-layer progressive disclosure:
+| Tool | Description |
+|------|-------------|
+| `get_schema()` | Get the complete GraphQL schema in SDL format |
+| `graphql_query(query)` | Execute GraphQL queries |
+| `graphql_mutation(mutation)` | Execute GraphQL mutations |
 
-**Layer 1 - Discover:**
-- **list_queries** - List all available queries with names and descriptions
-- **list_mutations** - List all available mutations with names and descriptions
-
-**Layer 2 - Understand:**
-- **get_query_schema** - Get detailed schema for a specific query (SDL or introspection format)
-- **get_mutation_schema** - Get detailed schema for a specific mutation
-
-**Layer 3 - Execute:**
-- **graphql_query** - Execute GraphQL queries directly
-- **graphql_mutation** - Execute GraphQL mutations directly
-
-### Example: AI Query Flow
+**Example: AI Query Flow:**
 
 ```
-AI: What queries are available?
-    → list_queries() → Returns: [{"name": "users", "description": "Get all users"}, ...]
-
-AI: Tell me about the "users" query
-    → get_query_schema(name="users", response_type="sdl")
-    → Returns:
-       # Query
-       users(limit: Int): [User!]!
-
-       # Related Types
-       type User {
-         id: Int!
-         name: String!
-         email: String!
-         posts: [Post!]!
-       }
+AI: What's available?
+    → get_schema() → Returns full SDL
 
 AI: Get users with their posts
-    → graphql_query(query="{ users(limit: 10) { id name posts { title } } }")
+    → graphql_query(query="{ userGetUsers(limit: 10) { id name posts { title } } }")
 
 AI: Create a new user
-    → graphql_mutation(query="mutation { createUser(name: \"Alice\", email: \"alice@example.com\") { id name } }")
+    → graphql_mutation(mutation="mutation { userCreate(name: \"Alice\", email: \"alice@example.com\") { id name } }")
 ```
 
-### Why MCP?
+### Multi-App MCP Server
 
-**Three-Layer Progressive Disclosure:**
-- Layer 1: Lightweight operation lists (~50 tokens)
-- Layer 2: On-demand schema details with SDL format
-- Layer 3: Direct GraphQL execution
+For scenarios with multiple independent databases:
 
-**Benefits:**
-- AI discovers schema dynamically
-- SDL format is compact and AI-friendly
-- Standard GraphQL syntax - no custom formats to learn
-- Minimal context usage for large schemas
+```python
+from sqlmodel_graphql.mcp import create_mcp_server
+from myapp.blog_models import BlogBaseEntity
+from myapp.shop_models import ShopBaseEntity
+
+apps = [
+    {
+        "name": "blog",
+        "base": BlogBaseEntity,
+        "description": "Blog system API",
+    },
+    {
+        "name": "shop",
+        "base": ShopBaseEntity,
+        "description": "E-commerce system API",
+    }
+]
+
+mcp = create_mcp_server(apps=apps, name="My Multi-App API")
+mcp.run()
+```
+
+**Available Tools (8 tools with app routing):**
+
+| Tool | Description |
+|------|-------------|
+| `list_apps()` | List all available applications |
+| `list_queries(app_name)` | List queries for an app |
+| `list_mutations(app_name)` | List mutations for an app |
+| `get_query_schema(name, app_name)` | Get query schema details |
+| `get_mutation_schema(name, app_name)` | Get mutation schema details |
+| `graphql_query(query, app_name)` | Execute GraphQL queries |
+| `graphql_mutation(mutation, app_name)` | Execute GraphQL mutations |
 
 ### Installation
 
 ```bash
-# Core library
 pip install sqlmodel-graphql[mcp]
 ```
 
 ### Running MCP Server
 
 ```bash
-# demo/mcp_server.py
 uv run python --with mcp demo/mcp_server.py           # stdio mode
 uv run python --with mcp demo/mcp_server.py --http    # HTTP mode
 ```
 
 ## API Reference
 
-### `@query(name=None, description=None)`
+### `@query`
 
-Mark a method as a GraphQL query.
+Mark a method as a GraphQL query. The field name is auto-generated as `{entityName}{MethodName}` in camelCase.
 
 ```python
-@query(name='users', description='Get all users')
+@query
 async def get_all(cls, limit: int = 10, query_meta: Optional[QueryMeta] = None) -> list['User']:
+    """Get all users."""  # Docstring becomes the field description
     ...
+# Generates: userGetAll(limit: Int): [User!]!
 ```
 
-### `@mutation(name=None, description=None)`
+### `@mutation`
 
-Mark a method as a GraphQL mutation. If the mutation returns an entity type, `query_meta` is automatically injected.
+Mark a method as a GraphQL mutation. The field name is auto-generated as `{entityName}{MethodName}` in camelCase.
 
 ```python
-@mutation(name='createUser')
-async def create(cls, name: str, email: str, query_meta: QueryMeta) -> 'User':
+@mutation
+async def create(cls, name: str, email: str, query_meta: QueryMeta = None) -> 'User':
     """Create a new user."""
     async with get_session() as session:
         user = cls(name=name, email=email)
         session.add(user)
         await session.commit()
         await session.refresh(user)
-        # Re-query with query_meta to load relationships
-        stmt = select(cls).where(cls.id == user.id)
-        stmt = stmt.options(*query_meta.to_options(cls))
-        result = await session.exec(stmt)
-        return result.first()
+        # Re-query with query_meta to load relationships if needed
+        if query_meta:
+            stmt = select(cls).where(cls.id == user.id)
+            stmt = stmt.options(*query_meta.to_options(cls))
+            result = await session.exec(stmt)
+            return result.first()
+        return user
+# Generates: userCreate(name: String!, email: String!): User!
 ```
 
-**Note:** `query_meta` is only injected when the return type is an entity. For scalar returns (e.g., `bool`, `str`), it is not passed.
+**Note:** `query_meta` is only injected when the method has the parameter in its signature AND the return type is an entity. For scalar returns (e.g., `bool`, `str`), it is not passed.
 
 ### `SDLGenerator(entities)`
 
