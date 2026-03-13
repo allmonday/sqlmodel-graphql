@@ -1,10 +1,15 @@
 """Tests for SDL generator."""
 
-from typing import Optional
+from enum import Enum
+from typing import Optional, Union
 
+from pydantic import BaseModel
 from sqlmodel import Field, SQLModel
 
 from sqlmodel_graphql import QueryMeta, SDLGenerator, mutation, query
+from sqlmodel_graphql.sdl_generator import _python_type_to_graphql
+from sqlmodel_graphql.type_converter import TypeConverter
+from sqlmodel_graphql.utils.schema_helpers import get_core_types, is_input_type
 
 
 # Define entities at module level to avoid metadata conflicts
@@ -106,3 +111,335 @@ class TestSDLGenerator:
         assert "id: Int!" in sdl
         assert "name: String!" in sdl
         assert "email: String!" in sdl
+
+
+# Additional test entities for helper function tests
+class StatusEnum(Enum):
+    """Test enum for SDL tests."""
+
+    ACTIVE = "active"
+    INACTIVE = "inactive"
+
+
+class EntityForHelperTest(SQLModel):
+    """Test entity for helper tests."""
+
+    id: int | None
+    name: str
+
+
+class InputModelForTest(BaseModel):
+    """Test input model."""
+
+    field1: str
+    field2: int
+
+
+class InputSQLModelForTest(SQLModel):
+    """Test input SQLModel (not an entity)."""
+
+    input_field: str
+
+
+class TestGetCoreTypes:
+    """Test cases for get_core_types() helper function."""
+
+    def test_get_core_types_simple_type(self) -> None:
+        """Test extracting core type from simple type."""
+        result = get_core_types(int)
+        assert result == [int]
+
+    def test_get_core_types_optional(self) -> None:
+        """Test extracting core types from Optional[T]."""
+        result = get_core_types(Optional[int])
+        assert result == [int]
+
+    def test_get_core_types_union(self) -> None:
+        """Test extracting core types from Union[T, U]."""
+        result = get_core_types(Union[int, str])
+        assert set(result) == {int, str}
+
+    def test_get_core_types_list(self) -> None:
+        """Test extracting core types from list[T]."""
+        result = get_core_types(list[int])
+        assert result == [int]
+
+    def test_get_core_types_list_of_optional(self) -> None:
+        """Test extracting core types from list[Optional[T]]."""
+        result = get_core_types(list[Optional[int]])
+        assert result == [int]
+
+    def test_get_core_types_nested(self) -> None:
+        """Test extracting core types from nested types."""
+        result = get_core_types(list[Union[int, str, None]])
+        assert set(result) == {int, str}
+
+    def test_get_core_types_none_in_union(self) -> None:
+        """Test that None is excluded from Union."""
+        result = get_core_types(Union[int, None])
+        assert result == [int]
+        assert type(None) not in result
+
+    def test_get_core_types_empty_list(self) -> None:
+        """Test extracting core type from untyped list.
+
+        Note: Untyped list returns the list class itself.
+        """
+        result = get_core_types(list)
+        # Untyped list returns the list class itself
+        assert result == [list]
+
+    def test_get_core_types_non_type(self) -> None:
+        """Test extracting core type from non-type returns empty."""
+        result = get_core_types("string_annotation")
+        assert result == []
+
+
+class TestIsInputType:
+    """Test cases for is_input_type() helper function."""
+
+    def test_is_input_type_sqlmodel(self) -> None:
+        """Test that SQLModel subclasses are input types."""
+        assert is_input_type(EntityForHelperTest) is True
+        assert is_input_type(InputSQLModelForTest) is True
+
+    def test_is_input_type_basemodel(self) -> None:
+        """Test that BaseModel subclasses are input types."""
+        assert is_input_type(InputModelForTest) is True
+
+    def test_is_input_type_scalar(self) -> None:
+        """Test that scalar types are not input types."""
+        assert is_input_type(int) is False
+        assert is_input_type(str) is False
+        assert is_input_type(bool) is False
+
+    def test_is_input_type_enum(self) -> None:
+        """Test that enum types are not input types."""
+        assert is_input_type(StatusEnum) is False
+
+    def test_is_input_type_non_class(self) -> None:
+        """Test that non-class values are not input types."""
+        assert is_input_type("string") is False
+        assert is_input_type(123) is False
+
+
+class TestPythonTypeToGraphql:
+    """Test cases for _python_type_to_graphql() helper function."""
+
+    def setup_method(self) -> None:
+        """Set up test fixtures."""
+        self.converter = TypeConverter({"EntityForHelperTest"})
+
+    def test_int_type(self) -> None:
+        """Test converting int type."""
+        result = _python_type_to_graphql(int, self.converter)
+        assert result == "Int!"
+
+    def test_str_type(self) -> None:
+        """Test converting str type."""
+        result = _python_type_to_graphql(str, self.converter)
+        assert result == "String!"
+
+    def test_bool_type(self) -> None:
+        """Test converting bool type."""
+        result = _python_type_to_graphql(bool, self.converter)
+        assert result == "Boolean!"
+
+    def test_float_type(self) -> None:
+        """Test converting float type."""
+        result = _python_type_to_graphql(float, self.converter)
+        assert result == "Float!"
+
+    def test_optional_int(self) -> None:
+        """Test converting Optional[int] type."""
+        result = _python_type_to_graphql(Optional[int], self.converter)
+        assert result == "Int"
+
+    def test_optional_str(self) -> None:
+        """Test converting Optional[str] type."""
+        result = _python_type_to_graphql(str | None, self.converter)
+        assert result == "String"
+
+    def test_list_int(self) -> None:
+        """Test converting list[int] type."""
+        result = _python_type_to_graphql(list[int], self.converter)
+        assert result == "[Int!]!"
+
+    def test_list_optional_int(self) -> None:
+        """Test converting list[Optional[int]] type.
+
+        Note: Current implementation doesn't unwrap Optional inside list,
+        so it falls back to String. This is a known edge case.
+        """
+        result = _python_type_to_graphql(list[Optional[int]], self.converter)
+        # Current behavior: Optional inside list is not handled, defaults to String
+        assert result == "[String!]!"
+
+    def test_list_str(self) -> None:
+        """Test converting list[str] type."""
+        result = _python_type_to_graphql(list[str], self.converter)
+        assert result == "[String!]!"
+
+    def test_entity_type(self) -> None:
+        """Test converting entity type."""
+        result = _python_type_to_graphql(EntityForHelperTest, self.converter)
+        assert result == "EntityForHelperTest!"
+
+    def test_optional_entity(self) -> None:
+        """Test converting Optional[Entity] type."""
+        result = _python_type_to_graphql(Optional[EntityForHelperTest], self.converter)
+        assert result == "EntityForHelperTest"
+
+    def test_list_entity(self) -> None:
+        """Test converting list[Entity] type."""
+        result = _python_type_to_graphql(list[EntityForHelperTest], self.converter)
+        assert result == "[EntityForHelperTest!]!"
+
+    def test_enum_type(self) -> None:
+        """Test converting enum type.
+
+        Note: Enum types are not marked as required by default.
+        """
+        result = _python_type_to_graphql(StatusEnum, self.converter)
+        assert result == "StatusEnum"
+
+
+class TestSDLGeneratorEnums:
+    """Test cases for SDLGenerator enum handling."""
+
+    def test_enum_in_sdl(self) -> None:
+        """Test that enums are included in SDL."""
+
+        class EnumEntity(SQLModel):
+            id: int | None
+            status: StatusEnum
+
+        generator = SDLGenerator([EnumEntity])
+        sdl = generator.generate()
+
+        assert "enum StatusEnum" in sdl
+        # Enum values use .value (lowercase), not the enum member names
+        assert "active" in sdl
+        assert "inactive" in sdl
+
+    def test_enum_type_field(self) -> None:
+        """Test that enum fields have correct type."""
+
+        class EnumEntity(SQLModel):
+            id: int | None
+            status: StatusEnum
+
+        generator = SDLGenerator([EnumEntity])
+        sdl = generator.generate()
+
+        # status is not a required field, so no ! at the end
+        assert "status: StatusEnum" in sdl
+
+
+class TestSDLGeneratorInputTypes:
+    """Test cases for SDLGenerator input type handling."""
+
+    def test_input_type_collection(self) -> None:
+        """Test that input types are collected from method parameters."""
+
+        class InputModel(BaseModel):
+            name: str
+            value: int
+
+        class EntityWithInput(SQLModel):
+            id: int | None
+
+            @mutation
+            def create_with_input(
+                cls, input_data: InputModel, query_meta: QueryMeta | None = None
+            ) -> "EntityWithInput":
+                """Create entity with input."""
+                return EntityWithInput(id=1)
+
+        generator = SDLGenerator([EntityWithInput])
+        sdl = generator.generate()
+
+        assert "input InputModel" in sdl
+        assert "name: String!" in sdl
+        assert "value: Int!" in sdl
+
+    def test_nested_input_types(self) -> None:
+        """Test that nested input types are collected."""
+
+        class InnerInput(BaseModel):
+            field: str
+
+        class OuterInput(BaseModel):
+            inner: InnerInput
+
+        class EntityWithNestedInput(SQLModel):
+            id: int | None
+
+            @mutation
+            def create_nested(
+                cls, data: OuterInput, query_meta: QueryMeta | None = None
+            ) -> "EntityWithNestedInput":
+                """Create entity with nested input."""
+                return EntityWithNestedInput(id=1)
+
+        generator = SDLGenerator([EntityWithNestedInput])
+        sdl = generator.generate()
+
+        assert "input InnerInput" in sdl
+        assert "input OuterInput" in sdl
+
+
+class TestSDLGeneratorOperationSDL:
+    """Test cases for SDLGenerator.generate_operation_sdl()."""
+
+    def test_generate_operation_sdl_query(self) -> None:
+        """Test generating SDL for a single query."""
+        generator = SDLGenerator([UserForTest])
+        sdl = generator.generate_operation_sdl("userForTestGetAll", "Query")
+
+        assert sdl is not None
+        assert "userForTestGetAll" in sdl
+        assert "limit: Int" in sdl
+        assert "UserForTest" in sdl
+
+    def test_generate_operation_sdl_mutation(self) -> None:
+        """Test generating SDL for a single mutation."""
+        generator = SDLGenerator([UserForTest])
+        sdl = generator.generate_operation_sdl("userForTestCreate", "Mutation")
+
+        assert sdl is not None
+        assert "userForTestCreate" in sdl
+        assert "name: String!" in sdl
+
+    def test_generate_operation_sdl_not_found(self) -> None:
+        """Test generating SDL for non-existent operation."""
+        generator = SDLGenerator([UserForTest])
+        sdl = generator.generate_operation_sdl("nonExistent", "Query")
+
+        assert sdl is None
+
+    def test_generate_operation_sdl_includes_related_types(self) -> None:
+        """Test that operation SDL includes related entity types."""
+
+        class AuthorForTest(SQLModel):
+            id: int | None
+            name: str
+
+        class ArticleForTest(SQLModel):
+            id: int | None
+            title: str
+            author: AuthorForTest
+
+            @query
+            def get_all(
+                cls, query_meta: QueryMeta | None = None
+            ) -> list["ArticleForTest"]:
+                """Get all articles."""
+                return []
+
+        generator = SDLGenerator([AuthorForTest, ArticleForTest])
+        sdl = generator.generate_operation_sdl("articleForTestGetAll", "Query")
+
+        assert sdl is not None
+        assert "ArticleForTest" in sdl
+        assert "AuthorForTest" in sdl

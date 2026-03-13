@@ -11,56 +11,10 @@ from sqlmodel import SQLModel
 
 from sqlmodel_graphql.type_converter import TypeConverter
 from sqlmodel_graphql.utils.naming import to_graphql_field_name
+from sqlmodel_graphql.utils.schema_helpers import get_core_types, is_input_type
 
 if TYPE_CHECKING:
     pass
-
-
-def _get_core_types(python_type: Any) -> list[type]:
-    """Extract core types from a type hint, unwrapping Optional, Union, list, etc."""
-    import types
-    from typing import Union
-
-    origin = get_origin(python_type)
-
-    # Handle Union (including Optional)
-    if origin is Union or origin is types.UnionType:
-        args = get_args(python_type)
-        result = []
-        for arg in args:
-            if arg is not type(None):
-                result.extend(_get_core_types(arg))
-        return result
-
-    # Handle list
-    if origin is list:
-        args = get_args(python_type)
-        if args:
-            return _get_core_types(args[0])
-        return []
-
-    # Base type
-    if isinstance(python_type, type):
-        return [python_type]
-
-    return []
-
-
-def _is_input_type(python_type: type) -> bool:
-    """Check if a type should be treated as a GraphQL Input type.
-
-    Input types are SQLModel or BaseModel subclasses that are NOT in the entity list
-    (i.e., they are used as mutation parameters, not as entity types).
-    """
-    if not isinstance(python_type, type):
-        return False
-    # Check if it's a SQLModel or Pydantic BaseModel
-    try:
-        if issubclass(python_type, SQLModel) or issubclass(python_type, BaseModel):
-            return True
-    except TypeError:
-        pass
-    return False
 
 
 def _python_type_to_graphql(
@@ -100,7 +54,7 @@ def _python_type_to_graphql_inner(
         return f"{entity_name}{'!' if not nullable else ''}"
 
     # Check if it's an Input type (SQLModel or BaseModel not in entities)
-    if entity_names is not None and _is_input_type(python_type) and python_type.__name__ not in entity_names:
+    if entity_names is not None and is_input_type(python_type) and python_type.__name__ not in entity_names:
         return f"{python_type.__name__}{'!' if not nullable else ''}"
 
     # Handle basic Python types
@@ -194,10 +148,10 @@ class SDLGenerator:
 
         def collect_from_type(param_type: Any) -> None:
             """Recursively collect Input types from a type hint."""
-            core_types = _get_core_types(param_type)
+            core_types = get_core_types(param_type)
 
             for core_type in core_types:
-                if _is_input_type(core_type) and core_type.__name__ not in self._entity_names:
+                if is_input_type(core_type) and core_type.__name__ not in self._entity_names:
                     type_name = core_type.__name__
                     if type_name not in visited:
                         visited.add(type_name)
@@ -297,7 +251,7 @@ class SDLGenerator:
             return python_type.__name__
 
         # Check if it's another Input type (SQLModel or BaseModel not in entities)
-        if _is_input_type(python_type) and python_type.__name__ not in self._entity_names:
+        if is_input_type(python_type) and python_type.__name__ not in self._entity_names:
             return f"{python_type.__name__}" if is_optional else f"{python_type.__name__}!"
 
         # Check if it's an entity type

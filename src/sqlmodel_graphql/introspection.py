@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Any, get_args, get_origin, get_type_hints
 from sqlmodel import SQLModel
 
 from sqlmodel_graphql.type_converter import TypeConverter
+from sqlmodel_graphql.utils.schema_helpers import get_core_types, is_input_type
 
 if TYPE_CHECKING:
     pass
@@ -447,43 +448,8 @@ class IntrospectionGenerator:
 
     def _collect_input_types(self) -> dict[str, type]:
         """Collect all Input types from query and mutation parameters."""
-        import types as types_module
-        from typing import Union
-
-        from pydantic import BaseModel
-
         input_types: dict[str, type] = {}
         visited: set[str] = set()
-
-        def get_core_types(python_type: Any) -> list[type]:
-            """Extract core types from a type hint."""
-            origin = get_origin(python_type)
-            if origin is Union or origin is types_module.UnionType:
-                args = get_args(python_type)
-                result = []
-                for arg in args:
-                    if arg is not type(None):
-                        result.extend(get_core_types(arg))
-                return result
-            if origin is list:
-                args = get_args(python_type)
-                if args:
-                    return get_core_types(args[0])
-                return []
-            if isinstance(python_type, type):
-                return [python_type]
-            return []
-
-        def is_input_type(python_type: type) -> bool:
-            """Check if a type should be treated as a GraphQL Input type."""
-            if not isinstance(python_type, type):
-                return False
-            try:
-                if issubclass(python_type, SQLModel) or issubclass(python_type, BaseModel):
-                    return True
-            except TypeError:
-                pass
-            return False
 
         def collect_from_type(param_type: Any) -> None:
             """Recursively collect Input types from a type hint."""

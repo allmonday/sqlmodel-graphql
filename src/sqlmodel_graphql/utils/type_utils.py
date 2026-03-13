@@ -5,6 +5,8 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any, ParamSpec, get_args, get_origin, get_type_hints
 
+from sqlmodel_graphql.type_converter import TypeConverter
+
 P = ParamSpec("P")
 
 
@@ -30,40 +32,6 @@ def get_field_type(entity: type, field_name: str) -> type:
     return Any
 
 
-def is_optional_type(annotation: type) -> bool:
-    """Check if a type annotation is Optional (Union with None).
-
-    Args:
-        annotation: Type annotation to check.
-
-    Returns:
-        True if the type is Optional.
-    """
-    origin = get_origin(annotation)
-    if origin is not None:
-        args = get_args(annotation)
-        return type(None) in args
-    return False
-
-
-def unwrap_optional_type(annotation: type) -> type:
-    """Unwrap Optional type to get the inner type.
-
-    Args:
-        annotation: Optional type annotation.
-
-    Returns:
-        Inner type or original if not Optional.
-    """
-    origin = get_origin(annotation)
-    if origin is not None:
-        args = get_args(annotation)
-        non_none_args = [a for a in args if a is not type(None)]
-        if non_none_args:
-            return non_none_args[0]
-    return annotation
-
-
 def get_return_entity_type(method: Callable[P, Any], entities: list[type]) -> type | None:
     """Get the return entity type if method returns an entity or list of entities.
 
@@ -81,19 +49,20 @@ def get_return_entity_type(method: Callable[P, Any], entities: list[type]) -> ty
         if return_type is None:
             return None
 
+        # Create a TypeConverter for type inspection
+        entity_names = {e.__name__ for e in entities}
+        converter = TypeConverter(entity_names)
+
         # Unwrap list type
         origin = get_origin(return_type)
         if origin is list:
-            args = get_args(return_type)
-            if args:
-                return_type = args[0]
+            return_type = converter.get_list_inner_type(return_type)
 
         # Unwrap Optional
-        if is_optional_type(return_type):
-            return_type = unwrap_optional_type(return_type)
+        if converter.is_optional(return_type):
+            return_type = converter.unwrap_optional(return_type)
 
         # Check if it's an entity
-        entity_names = {e.__name__ for e in entities}
         if isinstance(return_type, type) and return_type.__name__ in entity_names:
             return return_type
 
