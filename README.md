@@ -270,6 +270,15 @@ mcp.run()  # stdio mode (default)
 # mcp.run(transport="streamable-http")  # HTTP mode
 ```
 
+**Parameters:**
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `base` | `type` | Required | SQLModel base class. All subclasses with `@query`/`@mutation` decorators will be automatically discovered. |
+| `name` | `str` | `"SQLModel GraphQL API"` | Name of the MCP server (shown in MCP clients). |
+| `desc` | `str \| None` | `None` | Optional description for the GraphQL schema (used for both Query and Mutation type descriptions). |
+| `allow_mutation` | `bool` | `False` | If `True`, registers `graphql_mutation` tool and includes Mutation type in schema. Default is read-only mode. |
+
 **Available Tools (3 tools):**
 
 | Tool | Description |
@@ -316,6 +325,24 @@ apps = [
 mcp = create_mcp_server(apps=apps, name="My Multi-App API")
 mcp.run()
 ```
+
+**Parameters:**
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `apps` | `list[AppConfig]` | Required | List of app configurations. Each app has its own GraphQL schema and independent database. |
+| `name` | `str` | `"Multi-App SQLModel GraphQL API"` | Name of the MCP server (shown in MCP clients). |
+| `allow_mutation` | `bool` | `False` | If `True`, registers mutation-related tools (`list_mutations`, `get_mutation_schema`, `graphql_mutation`). Default is read-only mode. |
+
+**AppConfig Fields:**
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `name` | `str` | Yes | Unique identifier for the application (e.g., "blog", "shop"). |
+| `base` | `type[SQLModel]` | Yes | SQLModel base class for this application. |
+| `description` | `str \| None` | No | Human-readable description of the application. |
+| `query_description` | `str \| None` | No | Description for the Query type in GraphQL schema. |
+| `mutation_description` | `str \| None` | No | Description for the Mutation type in GraphQL schema. |
 
 **Available Tools (8 tools with app routing):**
 
