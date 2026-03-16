@@ -19,6 +19,7 @@ if TYPE_CHECKING:
 def create_mcp_server(
     apps: list[AppConfig],
     name: str = "Multi-App SQLModel GraphQL API",
+    allow_mutation: bool = False,
 ) -> FastMCP:
     """Create an MCP server that exposes multiple GraphQL APIs as tools.
 
@@ -30,15 +31,15 @@ def create_mcp_server(
 
     **Layer 1 (Lightweight):**
     - list_queries: List query names and descriptions for a specific app
-    - list_mutations: List mutation names and descriptions for a specific app
+    - list_mutations: List mutation names and descriptions for a specific app (if allow_mutation=True)
 
     **Layer 2 (On-demand):**
     - get_query_schema: Get query details + related type introspection
-    - get_mutation_schema: Get mutation details + related type introspection
+    - get_mutation_schema: Get mutation details + related type introspection (if allow_mutation=True)
 
     **Layer 3 (Execution):**
     - graphql_query: Execute GraphQL queries
-    - graphql_mutation: Execute GraphQL mutations
+    - graphql_mutation: Execute GraphQL mutations (if allow_mutation=True)
 
     All tools (except list_apps) require a mandatory app_name parameter.
 
@@ -46,6 +47,9 @@ def create_mcp_server(
         apps: List of app configurations. Each app has its own GraphQL schema
               and independent database.
         name: Name of the MCP server (shown in MCP clients).
+        allow_mutation: If True, registers mutation-related tools (list_mutations,
+            get_mutation_schema, graphql_mutation) and includes mutations_count
+            in list_apps. Default is False (read-only mode).
 
     Returns:
         A configured FastMCP server instance.
@@ -85,13 +89,15 @@ def create_mcp_server(
         mcp.run(transport="streamable-http")
         ```
 
-    Tools provided:
+    Tools provided (when allow_mutation=False, default):
         - list_apps(): List all available apps
         - list_queries(app_name): List queries for an app
-        - list_mutations(app_name): List mutations for an app
         - get_query_schema(name, app_name, response_type): Get query details
-        - get_mutation_schema(name, app_name, response_type): Get mutation details
         - graphql_query(query, app_name): Execute a GraphQL query
+
+    Additional tools (when allow_mutation=True):
+        - list_mutations(app_name): List mutations for an app
+        - get_mutation_schema(name, app_name, response_type): Get mutation details
         - graphql_mutation(mutation, app_name): Execute a GraphQL mutation
     """
     from mcp.server.fastmcp import FastMCP
@@ -103,7 +109,7 @@ def create_mcp_server(
     mcp = FastMCP(name)
 
     # Register all multi-app tools
-    register_multi_app_tools(mcp, manager)
+    register_multi_app_tools(mcp, manager, allow_mutation=allow_mutation)
 
     return mcp
 
@@ -112,16 +118,19 @@ def config_simple_mcp_server(
     base: type,
     name: str = "SQLModel GraphQL API",
     desc: str | None = None,
+    allow_mutation: bool = False,
 ) -> FastMCP:
     """Create a simplified MCP server for single-app scenarios.
 
-    This function creates a FastMCP server with only 3 tools, eliminating
+    This function creates a FastMCP server with only 2-3 tools, eliminating
     the complexity of multi-app management and progressive disclosure.
     Perfect for simple GraphQL APIs with a single database.
 
-    **Tools provided:**
+    **Tools provided (when allow_mutation=False, default):**
     - get_schema: Get the complete GraphQL schema in SDL format
     - graphql_query: Execute GraphQL queries
+
+    **Additional tool (when allow_mutation=True):**
     - graphql_mutation: Execute GraphQL mutations
 
     All tools work without requiring an app_name parameter.
@@ -132,9 +141,11 @@ def config_simple_mcp_server(
         name: Name of the MCP server (shown in MCP clients).
         desc: Optional description for the GraphQL schema (used for both
               Query and Mutation type descriptions).
+        allow_mutation: If True, registers graphql_mutation tool and includes
+            Mutation type in schema. Default is False (read-only mode).
 
     Returns:
-        A configured FastMCP server instance with 3 simplified tools.
+        A configured FastMCP server instance with 2-3 simplified tools.
 
     Example:
         ```python
@@ -171,9 +182,11 @@ def config_simple_mcp_server(
         For multi-app scenarios with separate databases, use create_mcp_server()
         instead, which provides app discovery and routing capabilities.
 
-    Tools provided:
+    Tools provided (when allow_mutation=False, default):
         - get_schema(): Get the complete GraphQL schema
         - graphql_query(query): Execute a GraphQL query
+
+    Additional tool (when allow_mutation=True):
         - graphql_mutation(mutation): Execute a GraphQL mutation
     """
     from mcp.server.fastmcp import FastMCP
@@ -188,6 +201,6 @@ def config_simple_mcp_server(
     mcp = FastMCP(name)
 
     # Register simplified tools (no app_name required)
-    register_simple_tools(mcp, manager)
+    register_simple_tools(mcp, manager, allow_mutation=allow_mutation)
 
     return mcp

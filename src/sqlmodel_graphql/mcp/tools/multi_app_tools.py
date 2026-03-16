@@ -19,12 +19,17 @@ if TYPE_CHECKING:
     from sqlmodel_graphql.mcp.managers.multi_app_manager import MultiAppManager
 
 
-def register_multi_app_tools(mcp: FastMCP, manager: MultiAppManager) -> None:
+def register_multi_app_tools(
+    mcp: FastMCP, manager: MultiAppManager, allow_mutation: bool = False
+) -> None:
     """Register all multi-app tools with the MCP server.
 
     Args:
         mcp: The FastMCP server instance
         manager: The MultiAppManager instance
+        allow_mutation: If True, registers mutation-related tools (list_mutations,
+            get_mutation_schema, graphql_mutation) and includes mutations_count
+            in list_apps. Default is False (read-only mode).
     """
 
     # Layer 0: Application discovery
@@ -70,7 +75,9 @@ def register_multi_app_tools(mcp: FastMCP, manager: MultiAppManager) -> None:
                     ),
                     "mutations_count": len(
                         app.tracer.list_operation_fields("Mutation")
-                    ),
+                    )
+                    if allow_mutation
+                    else 0,
                 }
                 for app in manager.apps.values()
             ]
@@ -129,42 +136,44 @@ def register_multi_app_tools(mcp: FastMCP, manager: MultiAppManager) -> None:
         except Exception as e:
             return create_error_response(str(e), MCPErrors.INTERNAL_ERROR)
 
-    @mcp.tool()
-    def list_mutations(app_name: str) -> dict[str, Any]:
-        """List all available GraphQL mutations for a specific application.
+    if allow_mutation:
 
-        Returns a lightweight list of mutation names and descriptions.
-        Use this tool after list_apps to discover mutations for a specific app,
-        then use get_mutation_schema to get detailed information.
+        @mcp.tool()
+        def list_mutations(app_name: str) -> dict[str, Any]:
+            """List all available GraphQL mutations for a specific application.
 
-        Args:
-            app_name: Name of the application (required). Get available names from list_apps().
+            Returns a lightweight list of mutation names and descriptions.
+            Use this tool after list_apps to discover mutations for a specific app,
+            then use get_mutation_schema to get detailed information.
 
-        Returns:
-            Dictionary containing:
-            - success: True
-            - data: List of mutation info dictionaries with name and description
-            - hint: Reminder to use the same app_name in subsequent calls
+            Args:
+                app_name: Name of the application (required). Get available names from list_apps().
 
-        Example:
-            list_mutations(app_name="blog")
-        """
-        try:
-            app = manager.get_app(app_name)
-            mutations = app.tracer.list_operation_fields("Mutation")
+            Returns:
+                Dictionary containing:
+                - success: True
+                - data: List of mutation info dictionaries with name and description
+                - hint: Reminder to use the same app_name in subsequent calls
 
-            # Add reminder about app_name
-            result = create_success_response(mutations)
-            result["hint"] = (
-                f"Working with app '{app_name}'. "
-                f"Remember to use app_name='{app_name}' in all subsequent calls "
-                f"(get_mutation_schema, graphql_mutation, etc.)"
-            )
-            return result
-        except ValueError as e:
-            return create_error_response(str(e), MCPErrors.APP_NOT_FOUND)
-        except Exception as e:
-            return create_error_response(str(e), MCPErrors.INTERNAL_ERROR)
+            Example:
+                list_mutations(app_name="blog")
+            """
+            try:
+                app = manager.get_app(app_name)
+                mutations = app.tracer.list_operation_fields("Mutation")
+
+                # Add reminder about app_name
+                result = create_success_response(mutations)
+                result["hint"] = (
+                    f"Working with app '{app_name}'. "
+                    f"Remember to use app_name='{app_name}' in all subsequent calls "
+                    f"(get_mutation_schema, graphql_mutation, etc.)"
+                )
+                return result
+            except ValueError as e:
+                return create_error_response(str(e), MCPErrors.APP_NOT_FOUND)
+            except Exception as e:
+                return create_error_response(str(e), MCPErrors.INTERNAL_ERROR)
 
     # Layer 2: Get operation schema
     @mcp.tool()
@@ -241,75 +250,77 @@ def register_multi_app_tools(mcp: FastMCP, manager: MultiAppManager) -> None:
         except Exception as e:
             return create_error_response(str(e), MCPErrors.INTERNAL_ERROR)
 
-    @mcp.tool()
-    def get_mutation_schema(
-        name: str, app_name: str, response_type: str = "sdl"
-    ) -> dict[str, Any]:
-        """Get detailed schema information for a specific GraphQL mutation.
+    if allow_mutation:
 
-        Use this tool to understand the structure of a mutation, including its
-        arguments, return type, and related types. Supports two response formats:
-        - sdl: Returns GraphQL Schema Definition Language (compact, AI-friendly)
-        - introspection: Returns detailed introspection data
+        @mcp.tool()
+        def get_mutation_schema(
+            name: str, app_name: str, response_type: str = "sdl"
+        ) -> dict[str, Any]:
+            """Get detailed schema information for a specific GraphQL mutation.
 
-        Args:
-            name: Name of the mutation (e.g., "createUser", "updatePost")
-            app_name: Name of the application (required)
-            response_type: Response format - "sdl" or "introspection" (default: "sdl")
+            Use this tool to understand the structure of a mutation, including its
+            arguments, return type, and related types. Supports two response formats:
+            - sdl: Returns GraphQL Schema Definition Language (compact, AI-friendly)
+            - introspection: Returns detailed introspection data
 
-        Returns:
-            Dictionary containing:
-            - success: True
-            - data: Schema information in requested format
+            Args:
+                name: Name of the mutation (e.g., "createUser", "updatePost")
+                app_name: Name of the application (required)
+                response_type: Response format - "sdl" or "introspection" (default: "sdl")
 
-        Examples:
-            # SDL format (recommended)
-            get_mutation_schema(name="createUser", app_name="blog", response_type="sdl")
+            Returns:
+                Dictionary containing:
+                - success: True
+                - data: Schema information in requested format
 
-            # Introspection format
-            get_mutation_schema(name="createUser", app_name="blog", response_type="introspection")
-        """
-        try:
-            app = manager.get_app(app_name)
+            Examples:
+                # SDL format (recommended)
+                get_mutation_schema(name="createUser", app_name="blog", response_type="sdl")
 
-            if response_type == "sdl":
-                sdl = app.sdl_generator.generate_operation_sdl(name, "Mutation")
-                if sdl is None:
+                # Introspection format
+                get_mutation_schema(name="createUser", app_name="blog", response_type="introspection")
+            """
+            try:
+                app = manager.get_app(app_name)
+
+                if response_type == "sdl":
+                    sdl = app.sdl_generator.generate_operation_sdl(name, "Mutation")
+                    if sdl is None:
+                        return create_error_response(
+                            f"Mutation '{name}' not found in app '{app.name}'",
+                            MCPErrors.TYPE_NOT_FOUND,
+                        )
+                    return create_success_response({"sdl": sdl})
+
+                # Introspection format
+                operation = app.tracer.get_operation_field("Mutation", name)
+                if operation is None:
                     return create_error_response(
                         f"Mutation '{name}' not found in app '{app.name}'",
                         MCPErrors.TYPE_NOT_FOUND,
                     )
-                return create_success_response({"sdl": sdl})
 
-            # Introspection format
-            operation = app.tracer.get_operation_field("Mutation", name)
-            if operation is None:
-                return create_error_response(
-                    f"Mutation '{name}' not found in app '{app.name}'",
-                    MCPErrors.TYPE_NOT_FOUND,
+                # Collect related types
+                return_type = operation.get("type")
+                related_type_names = app.tracer.collect_related_types(return_type)
+
+                # Include argument types
+                for arg in operation.get("args", []):
+                    arg_types = app.tracer.collect_related_types(arg.get("type"))
+                    related_type_names.update(arg_types)
+
+                types = app.tracer.get_introspection_for_types(related_type_names)
+
+                return create_success_response(
+                    {
+                        "operation": operation,
+                        "types": types,
+                    }
                 )
-
-            # Collect related types
-            return_type = operation.get("type")
-            related_type_names = app.tracer.collect_related_types(return_type)
-
-            # Include argument types
-            for arg in operation.get("args", []):
-                arg_types = app.tracer.collect_related_types(arg.get("type"))
-                related_type_names.update(arg_types)
-
-            types = app.tracer.get_introspection_for_types(related_type_names)
-
-            return create_success_response(
-                {
-                    "operation": operation,
-                    "types": types,
-                }
-            )
-        except ValueError as e:
-            return create_error_response(str(e), MCPErrors.APP_NOT_FOUND)
-        except Exception as e:
-            return create_error_response(str(e), MCPErrors.INTERNAL_ERROR)
+            except ValueError as e:
+                return create_error_response(str(e), MCPErrors.APP_NOT_FOUND)
+            except Exception as e:
+                return create_error_response(str(e), MCPErrors.INTERNAL_ERROR)
 
     # Layer 3: Execute operations
     @mcp.tool()
@@ -380,71 +391,73 @@ def register_multi_app_tools(mcp: FastMCP, manager: MultiAppManager) -> None:
         except Exception as e:
             return create_error_response(str(e), MCPErrors.INTERNAL_ERROR)
 
-    @mcp.tool()
-    async def graphql_mutation(mutation: str, app_name: str) -> dict[str, Any]:
-        """Execute a GraphQL mutation on a specific application.
+    if allow_mutation:
 
-        Use this tool to execute GraphQL mutations after discovering available
-        operations with list_mutations and understanding their schema with
-        get_mutation_schema.
+        @mcp.tool()
+        async def graphql_mutation(mutation: str, app_name: str) -> dict[str, Any]:
+            """Execute a GraphQL mutation on a specific application.
 
-        Args:
-            mutation: A GraphQL mutation string
-            app_name: Name of the application (required)
+            Use this tool to execute GraphQL mutations after discovering available
+            operations with list_mutations and understanding their schema with
+            get_mutation_schema.
 
-        Returns:
-            Dictionary containing:
-            - success: True if mutation succeeded
-            - data: The mutation result (if successful)
-            - error: Error message (if failed)
-            - error_type: Type of error (if failed)
+            Args:
+                mutation: A GraphQL mutation string
+                app_name: Name of the application (required)
 
-        Examples:
-            # Create mutation
-            graphql_mutation(
-                mutation='mutation { createUser(name: "Alice", '
-                         'email: "alice@example.com") { id name } }',
-                app_name="blog"
-            )
+            Returns:
+                Dictionary containing:
+                - success: True if mutation succeeded
+                - data: The mutation result (if successful)
+                - error: Error message (if failed)
+                - error_type: Type of error (if failed)
 
-            # Update mutation
-            graphql_mutation(
-                mutation='mutation { updatePost(id: 1, title: "New Title") { id title } }',
-                app_name="blog"
-            )
-        """
-        if not mutation or not mutation.strip():
-            return create_error_response(
-                "mutation is required and cannot be empty",
-                MCPErrors.MISSING_REQUIRED_FIELD,
-            )
-
-        try:
-            app = manager.get_app(app_name)
-            result = await app.handler.execute(mutation)
-
-            if "errors" in result:
-                error_messages = [
-                    err.get("message", "Unknown error") for err in result["errors"]
-                ]
-                error_response = create_error_response(
-                    "; ".join(error_messages),
-                    MCPErrors.MUTATION_EXECUTION_ERROR,
+            Examples:
+                # Create mutation
+                graphql_mutation(
+                    mutation='mutation { createUser(name: "Alice", '
+                    'email: "alice@example.com") { id name } }',
+                    app_name="blog"
                 )
-                error_response["hint"] = (
-                    f"Error occurred on app '{app_name}'. "
-                    f"Use the same app_name='{app_name}' for retry."
-                )
-                return error_response
 
-            # Success - add reminder about app_name for future calls
-            response = create_success_response(result.get("data"))
-            response["hint"] = (
-                f"Mutation executed on app '{app_name}'. "
-                f"For future mutations, remember to use app_name='{app_name}'."
-            )
-            return response
-        except ValueError as e:
-            return create_error_response(str(e), MCPErrors.APP_NOT_FOUND)
-        except Exception as e:
-            return create_error_response(str(e), MCPErrors.INTERNAL_ERROR)
+                # Update mutation
+                graphql_mutation(
+                    mutation='mutation { updatePost(id: 1, title: "New Title") { id title } }',
+                    app_name="blog"
+                )
+            """
+            if not mutation or not mutation.strip():
+                return create_error_response(
+                    "mutation is required and cannot be empty",
+                    MCPErrors.MISSING_REQUIRED_FIELD,
+                )
+
+            try:
+                app = manager.get_app(app_name)
+                result = await app.handler.execute(mutation)
+
+                if "errors" in result:
+                    error_messages = [
+                        err.get("message", "Unknown error") for err in result["errors"]
+                    ]
+                    error_response = create_error_response(
+                        "; ".join(error_messages),
+                        MCPErrors.MUTATION_EXECUTION_ERROR,
+                    )
+                    error_response["hint"] = (
+                        f"Error occurred on app '{app_name}'. "
+                        f"Use the same app_name='{app_name}' for retry."
+                    )
+                    return error_response
+
+                # Success - add reminder about app_name for future calls
+                response = create_success_response(result.get("data"))
+                response["hint"] = (
+                    f"Mutation executed on app '{app_name}'. "
+                    f"For future mutations, remember to use app_name='{app_name}'."
+                )
+                return response
+            except ValueError as e:
+                return create_error_response(str(e), MCPErrors.APP_NOT_FOUND)
+            except Exception as e:
+                return create_error_response(str(e), MCPErrors.INTERNAL_ERROR)

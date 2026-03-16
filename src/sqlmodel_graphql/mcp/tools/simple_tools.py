@@ -19,7 +19,9 @@ if TYPE_CHECKING:
     from sqlmodel_graphql.mcp.managers.single_app_manager import SingleAppManager
 
 
-def register_simple_tools(mcp: FastMCP, manager: SingleAppManager) -> None:
+def register_simple_tools(
+    mcp: FastMCP, manager: SingleAppManager, allow_mutation: bool = False
+) -> None:
     """Register simplified tools for single-app scenarios.
 
     These tools are designed for single-application scenarios where:
@@ -30,6 +32,8 @@ def register_simple_tools(mcp: FastMCP, manager: SingleAppManager) -> None:
     Args:
         mcp: The FastMCP server instance
         manager: The SingleAppManager instance
+        allow_mutation: If True, registers graphql_mutation tool and includes
+            Mutation type in schema. Default is False (read-only mode).
     """
 
     @mcp.tool()
@@ -60,7 +64,7 @@ def register_simple_tools(mcp: FastMCP, manager: SingleAppManager) -> None:
             }
         """
         try:
-            sdl = manager.sdl_generator.generate()
+            sdl = manager.sdl_generator.generate(include_mutations=allow_mutation)
             return create_success_response({"sdl": sdl})
         except Exception as e:
             return create_error_response(str(e), MCPErrors.INTERNAL_ERROR)
@@ -120,65 +124,67 @@ def register_simple_tools(mcp: FastMCP, manager: SingleAppManager) -> None:
         except Exception as e:
             return create_error_response(str(e), MCPErrors.INTERNAL_ERROR)
 
-    @mcp.tool()
-    async def graphql_mutation(mutation: str) -> dict[str, Any]:
-        """Execute a GraphQL mutation.
+    if allow_mutation:
 
-        Use this tool to create, update, or delete data.
-        First use get_schema to discover available mutations and their input types.
+        @mcp.tool()
+        async def graphql_mutation(mutation: str) -> dict[str, Any]:
+            """Execute a GraphQL mutation.
 
-        Args:
-            mutation: A GraphQL mutation string (must be valid GraphQL syntax)
+            Use this tool to create, update, or delete data.
+            First use get_schema to discover available mutations and their input types.
 
-        Returns:
-            Dictionary containing:
-            - success: True if mutation succeeded
-            - data: The mutation result (if successful)
-            - error: Error message (if failed)
-            - error_type: Type of error (if failed)
+            Args:
+                mutation: A GraphQL mutation string (must be valid GraphQL syntax)
 
-        Examples:
-            # Create mutation with inline arguments
-            mutation {
-                createUser(name: "Alice", email: "alice@example.com") {
-                    id
-                    name
+            Returns:
+                Dictionary containing:
+                - success: True if mutation succeeded
+                - data: The mutation result (if successful)
+                - error: Error message (if failed)
+                - error_type: Type of error (if failed)
+
+            Examples:
+                # Create mutation with inline arguments
+                mutation {
+                    createUser(name: "Alice", email: "alice@example.com") {
+                        id
+                        name
+                    }
                 }
-            }
 
-            # Update mutation
-            mutation {
-                updatePost(id: 1, title: "New Title") {
-                    id
-                    title
+                # Update mutation
+                mutation {
+                    updatePost(id: 1, title: "New Title") {
+                        id
+                        title
+                    }
                 }
-            }
 
-            # Create with input type
-            mutation {
-                createUserWithInput(input: {name: "Bob", email: "bob@example.com"}) {
-                    id
+                # Create with input type
+                mutation {
+                    createUserWithInput(input: {name: "Bob", email: "bob@example.com"}) {
+                        id
+                    }
                 }
-            }
-        """
-        if not mutation or not mutation.strip():
-            return create_error_response(
-                "mutation is required and cannot be empty",
-                MCPErrors.MISSING_REQUIRED_FIELD,
-            )
-
-        try:
-            result = await manager.handler.execute(mutation)
-
-            if "errors" in result:
-                error_messages = [
-                    err.get("message", "Unknown error") for err in result["errors"]
-                ]
+            """
+            if not mutation or not mutation.strip():
                 return create_error_response(
-                    "; ".join(error_messages),
-                    MCPErrors.MUTATION_EXECUTION_ERROR,
+                    "mutation is required and cannot be empty",
+                    MCPErrors.MISSING_REQUIRED_FIELD,
                 )
 
-            return create_success_response(result.get("data"))
-        except Exception as e:
-            return create_error_response(str(e), MCPErrors.INTERNAL_ERROR)
+            try:
+                result = await manager.handler.execute(mutation)
+
+                if "errors" in result:
+                    error_messages = [
+                        err.get("message", "Unknown error") for err in result["errors"]
+                    ]
+                    return create_error_response(
+                        "; ".join(error_messages),
+                        MCPErrors.MUTATION_EXECUTION_ERROR,
+                    )
+
+                return create_success_response(result.get("data"))
+            except Exception as e:
+                return create_error_response(str(e), MCPErrors.INTERNAL_ERROR)

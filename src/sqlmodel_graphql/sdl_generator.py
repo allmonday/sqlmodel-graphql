@@ -85,8 +85,12 @@ class SDLGenerator:
         self._query_description = query_description
         self._mutation_description = mutation_description
 
-    def generate(self) -> str:
-        """Generate complete GraphQL SDL string."""
+    def generate(self, include_mutations: bool = True) -> str:
+        """Generate complete GraphQL SDL string.
+
+        Args:
+            include_mutations: If True, includes Mutation type in SDL. Default is True.
+        """
         parts = []
 
         # 1. Generate enum types
@@ -110,13 +114,14 @@ class SDLGenerator:
                 query_def = f'"""{self._query_description}"""\n{query_def}'
             parts.append(query_def)
 
-        # 5. Generate Mutation type
-        mutation_fields = self._collect_mutation_fields()
-        if mutation_fields:
-            mutation_def = f"type Mutation {{\n{chr(10).join(mutation_fields)}\n}}"
-            if self._mutation_description:
-                mutation_def = f'"""{self._mutation_description}"""\n{mutation_def}'
-            parts.append(mutation_def)
+        # 5. Generate Mutation type (conditional)
+        if include_mutations:
+            mutation_fields = self._collect_mutation_fields()
+            if mutation_fields:
+                mutation_def = f"type Mutation {{\n{chr(10).join(mutation_fields)}\n}}"
+                if self._mutation_description:
+                    mutation_def = f'"""{self._mutation_description}"""\n{mutation_def}'
+                parts.append(mutation_def)
 
         return "\n\n".join(parts)
 

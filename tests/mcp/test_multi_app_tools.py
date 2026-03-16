@@ -82,7 +82,7 @@ def multi_app_mcp():
             "mutation_description": "Mutate shop data",
         },
     ]
-    return create_mcp_server(apps=apps, name="Test Multi-App")
+    return create_mcp_server(apps=apps, name="Test Multi-App", allow_mutation=True)
 
 
 class TestMultiAppTools:
@@ -337,3 +337,56 @@ class TestMultiAppTools:
 
         # They should not share the same queries
         assert blog_query_names != shop_query_names
+
+
+class TestMultiAppToolsReadOnlyMode:
+    """Tests for read-only mode (allow_mutation=False)."""
+
+    @pytest.fixture
+    def read_only_mcp(self):
+        """Create a multi-app MCP server without mutation support."""
+        apps = [
+            {
+                "name": "blog",
+                "base": BlogBaseEntity,
+                "description": "Blog application",
+            },
+        ]
+        return create_mcp_server(apps=apps, name="Test Read-Only", allow_mutation=False)
+
+    def test_list_apps_mutations_count_zero(self, read_only_mcp):
+        """Test list_apps returns mutations_count=0 when allow_mutation=False."""
+        tools = read_only_mcp._tool_manager._tools
+        list_apps_tool = tools.get("list_apps")
+
+        result = list_apps_tool.fn()
+
+        assert result["success"] is True
+        # mutations_count should be 0 in read-only mode
+        for app in result["data"]:
+            assert app["mutations_count"] == 0
+
+    def test_mutation_tools_not_registered(self, read_only_mcp):
+        """Test mutation-related tools are not registered when allow_mutation=False."""
+        tools = read_only_mcp._tool_manager._tools
+
+        # These tools should NOT be registered
+        assert "list_mutations" not in tools
+        assert "get_mutation_schema" not in tools
+        assert "graphql_mutation" not in tools
+
+        # These tools SHOULD be registered
+        assert "list_apps" in tools
+        assert "list_queries" in tools
+        assert "get_query_schema" in tools
+        assert "graphql_query" in tools
+
+    def test_query_tools_still_work(self, read_only_mcp):
+        """Test query tools still work in read-only mode."""
+        tools = read_only_mcp._tool_manager._tools
+
+        # Test list_queries
+        list_queries_tool = tools.get("list_queries")
+        result = list_queries_tool.fn(app_name="blog")
+        assert result["success"] is True
+        assert len(result["data"]) > 0
