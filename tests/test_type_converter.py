@@ -126,7 +126,7 @@ class TestTypeConverterGetListInnerType:
     def test_get_list_inner_type_optional(self) -> None:
         """Test getting inner type from list[Optional[int]]."""
         converter = TypeConverter({"UserForConverterTest"})
-        result = converter.get_list_inner_type(list[Optional[int]])
+        result = converter.get_list_inner_type(list[int | None])
         assert result == int
 
     def test_get_list_inner_type_empty(self) -> None:
@@ -250,7 +250,7 @@ class TestTypeConverterIsRelationship:
     def test_is_relationship_list_optional_entity(self) -> None:
         """Test detecting list of optional entities relationship."""
         converter = TypeConverter({"UserForConverterTest"})
-        assert converter.is_relationship(list[Optional[UserForConverterTest]]) is True
+        assert converter.is_relationship(list[UserForConverterTest | None]) is True
 
     def test_is_relationship_non_entity(self) -> None:
         """Test non-entity type is not a relationship."""
@@ -278,7 +278,7 @@ class TestTypeConverterUnwrapToBaseType:
     def test_unwrap_to_base_type_list_optional(self) -> None:
         """Test unwrapping list[Optional[T]] to T."""
         converter = TypeConverter({"UserForConverterTest"})
-        result = converter.unwrap_to_base_type(list[Optional[int]])
+        result = converter.unwrap_to_base_type(list[int | None])
         assert result == int
 
     def test_unwrap_to_base_type_entity(self) -> None:

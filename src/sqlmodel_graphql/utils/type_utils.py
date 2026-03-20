@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Any, ParamSpec, get_args, get_origin, get_type_hints
+from typing import Any, ParamSpec, get_origin, get_type_hints
 
 from sqlmodel_graphql.type_converter import TypeConverter
 

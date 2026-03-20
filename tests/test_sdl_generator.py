@@ -166,12 +166,12 @@ class TestGetCoreTypes:
 
     def test_get_core_types_list_of_optional(self) -> None:
         """Test extracting core types from list[Optional[T]]."""
-        result = get_core_types(list[Optional[int]])
+        result = get_core_types(list[int | None])
         assert result == [int]
 
     def test_get_core_types_nested(self) -> None:
         """Test extracting core types from nested types."""
-        result = get_core_types(list[Union[int, str, None]])
+        result = get_core_types(list[int | str | None])
         assert set(result) == {int, str}
 
     def test_get_core_types_none_in_union(self) -> None:
@@ -271,7 +271,7 @@ class TestPythonTypeToGraphql:
         Note: Current implementation doesn't unwrap Optional inside list,
         so it falls back to String. This is a known edge case.
         """
-        result = _python_type_to_graphql(list[Optional[int]], self.converter)
+        result = _python_type_to_graphql(list[int | None], self.converter)
         # Current behavior: Optional inside list is not handled, defaults to String
         assert result == "[String!]!"
 

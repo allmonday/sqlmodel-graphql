@@ -6,7 +6,6 @@ import inspect
 from enum import Enum
 from typing import TYPE_CHECKING, Any, get_args, get_origin, get_type_hints
 
-from pydantic import BaseModel
 from sqlmodel import SQLModel
 
 from sqlmodel_graphql.type_converter import TypeConverter

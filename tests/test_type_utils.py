@@ -1,6 +1,5 @@
 """Tests for type_utils module."""
 
-from typing import Optional
 
 from sqlmodel import Field, SQLModel
 
@@ -15,7 +14,7 @@ class EntityForUtilsTest(SQLModel):
 
     id: int | None = Field(default=None, primary_key=True)
     name: str
-    optional_field: Optional[str] = None
+    optional_field: str | None = None
 
 
 class AnotherEntityForUtilsTest(SQLModel):
@@ -94,7 +93,7 @@ class TestGetReturnEntityType:
         class TestEntityOptional(SQLModel):
             id: int | None
 
-        def find(cls, id: int) -> Optional[TestEntityOptional]:  # type: ignore
+        def find(cls, id: int) -> TestEntityOptional | None:  # type: ignore
             return None
 
         TestEntityOptional.find = classmethod(find)  # type: ignore
@@ -157,7 +156,7 @@ class TestGetReturnEntityType:
         class TestEntityListOpt(SQLModel):
             id: int | None
 
-        def search(cls) -> list[Optional[TestEntityListOpt]]:  # type: ignore
+        def search(cls) -> list[TestEntityListOpt | None]:  # type: ignore
             return []
 
         TestEntityListOpt.search = classmethod(search)  # type: ignore
