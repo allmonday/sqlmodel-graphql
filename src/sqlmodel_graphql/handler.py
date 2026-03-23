@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from sqlmodel_graphql.discovery import EntityDiscovery
+from sqlmodel_graphql.graphiql import GRAPHIQL_HTML
 from sqlmodel_graphql.introspection import IntrospectionGenerator
 from sqlmodel_graphql.query_parser import QueryParser
 from sqlmodel_graphql.scanning import MethodScanner
@@ -92,6 +93,17 @@ class GraphQLHandler:
             SDL string representing the GraphQL schema.
         """
         return self._sdl_generator.generate()
+
+    def get_graphiql_html(self, endpoint: str = "/graphql") -> str:
+        """Get the GraphiQL HTML template.
+
+        Args:
+            endpoint: GraphQL API endpoint URL. Defaults to "/graphql".
+
+        Returns:
+            HTML string for GraphiQL playground.
+        """
+        return GRAPHIQL_HTML.replace("{graphql_url}", endpoint)
 
     async def execute(
         self,

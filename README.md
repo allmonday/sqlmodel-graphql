@@ -5,21 +5,75 @@
 [![PyPI Downloads](https://static.pepy.tech/badge/sqlmodel-graphql/month)](https://pepy.tech/projects/sqlmodel-graphql)
 ![Python Versions](https://img.shields.io/pypi/pyversions/sqlmodel-graphql)
 
-**Generate GraphQL APIs & MCP from SQLModel — zero configuration required**
+**From SQLModel to Running GraphQL API + MCP Server in Minutes**
+
+sqlmodel-graphql is the fastest way to build a minimum viable system:
+
+- **Zero Config GraphQL** - SQLModel classes → GraphQL schema automatically
+- **@query/@mutation Decorators** - Mark methods, get endpoints instantly
+- **GraphiQL Built-in** - Interactive debugging playground
+- **One-Line MCP Server** - Expose APIs to AI assistants
+- **Auto N+1 Prevention** - Query optimization handled for you
 
 No schema files. No resolvers. No boilerplate.
+Just add decorators to your SQLModel classes.
 
-Just decorators and Python. Your SQLModel classes become GraphQL APIs instantly.
+## 30-Second Quick Start
 
-Plus: expose your GraphQL via MCP to AI assistants (Claude, GPT, etc.) with **three-layer progressive disclosure** — AI discovers what's available, understands the schema, then executes queries efficiently.
+```python
+from fastapi import FastAPI
+from fastapi.responses import HTMLResponse
+from pydantic import BaseModel
+from sqlmodel import SQLModel, Field, select
+from sqlmodel_graphql import query, GraphQLHandler
+
+# 1. Define your model with @query decorator
+class User(SQLModel, table=True):
+    id: int | None = Field(default=None, primary_key=True)
+    name: str
+
+    @query
+    async def get_all(cls) -> list['User']:
+        async with get_session() as session:
+            return (await session.exec(select(cls))).all()
+
+# 2. Create GraphQL handler (auto-generates schema)
+handler = GraphQLHandler(base=SQLModel)
+
+# 3. Setup FastAPI endpoints
+class GraphQLRequest(BaseModel):
+    query: str
+    variables: dict | None = None
+
+app = FastAPI()
+
+@app.get("/graphql", response_class=HTMLResponse)
+async def graphiql():
+    return handler.get_graphiql_html()
+
+@app.post("/graphql")
+async def graphql(req: GraphQLRequest):
+    return await handler.execute(req.query, req.variables)
+```
+
+Run: `uvicorn app:app` and visit `http://localhost:8000/graphql` for the interactive playground.
 
 ## Features
 
-- **Automatic SDL Generation**: Generate GraphQL schema from SQLModel classes
-- **@query/@mutation Decorators**: Mark methods as GraphQL operations
-- **Query Optimization**: Parse GraphQL queries to generate optimized SQLAlchemy queries
-- **N+1 Prevention**: Automatic `selectinload` and `load_only` generation
-- **MCP Integration**: Expose GraphQL as MCP tools with progressive disclosure for minimal context usage
+### Rapid Development
+- **Zero Config GraphQL** - SQLModel classes become GraphQL schema automatically
+- **@query/@mutation Decorators** - Mark methods as GraphQL operations
+- **GraphiQL Integration** - Built-in playground for testing and debugging
+
+### Smart Optimization
+- **Auto N+1 Prevention** - `selectinload` and `load_only` generated automatically
+- **Query-Aware Loading** - Only fetch requested fields and relationships
+- **QueryMeta Injection** - Framework analyzes queries and optimizes database calls
+
+### AI-Ready with MCP
+- **One-Line MCP Server** - `config_simple_mcp_server(base=BaseEntity)`
+- **Progressive Disclosure** - AI discovers schema, understands, then queries
+- **Multi-App Support** - Serve multiple databases through one MCP server
 
 ## Installation
 
@@ -439,6 +493,10 @@ result = await handler.execute("{ users { id name } }")
 
 # Get SDL
 sdl = handler.get_sdl()
+
+# Get GraphiQL HTML (for interactive playground)
+html = handler.get_graphiql_html()  # defaults to /graphql endpoint
+html = handler.get_graphiql_html(endpoint="/api/graphql")  # custom endpoint
 ```
 
 **Auto-Discovery Features:**

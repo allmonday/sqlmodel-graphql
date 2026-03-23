@@ -31,7 +31,7 @@ Example:
 
 from __future__ import annotations
 
-__version__ = "0.1.0"
+__version__ = "0.11.0"
 
 from sqlmodel_graphql.decorator import mutation, query
 from sqlmodel_graphql.handler import GraphQLHandler
