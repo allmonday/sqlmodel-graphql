@@ -1,5 +1,7 @@
 # Changelog
 
+## 0.12.0
+- migrate from mcp to fastmcp
 
 ## 0.11.0
 

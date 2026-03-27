@@ -13,7 +13,7 @@ from sqlmodel_graphql.mcp.tools.multi_app_tools import register_multi_app_tools
 from sqlmodel_graphql.mcp.types.app_config import AppConfig
 
 if TYPE_CHECKING:
-    from mcp.server.fastmcp import FastMCP
+    from fastmcp import FastMCP
 
 
 def create_mcp_server(
@@ -103,7 +103,7 @@ def create_mcp_server(
         - get_mutation_schema(name, app_name, response_type): Get mutation details
         - graphql_mutation(mutation, app_name): Execute a GraphQL mutation
     """
-    from mcp.server.fastmcp import FastMCP
+    from fastmcp import FastMCP
 
     # Create the multi-app manager
     manager = MultiAppManager(apps)
@@ -192,7 +192,7 @@ def config_simple_mcp_server(
     Additional tool (when allow_mutation=True):
         - graphql_mutation(mutation): Execute a GraphQL mutation
     """
-    from mcp.server.fastmcp import FastMCP
+    from fastmcp import FastMCP
 
     from sqlmodel_graphql.mcp.managers.single_app_manager import SingleAppManager
     from sqlmodel_graphql.mcp.tools.simple_tools import register_simple_tools

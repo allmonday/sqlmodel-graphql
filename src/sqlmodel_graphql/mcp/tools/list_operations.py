@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Any
 from sqlmodel_graphql.mcp.types.errors import create_success_response
 
 if TYPE_CHECKING:
-    from mcp.server.fastmcp import FastMCP
+    from fastmcp import FastMCP
 
     from sqlmodel_graphql.mcp.builders.type_tracer import TypeTracer
 

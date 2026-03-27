@@ -12,13 +12,23 @@ from sqlmodel_graphql.mcp import config_simple_mcp_server
 from sqlmodel_graphql.mcp.managers.single_app_manager import SingleAppManager
 from sqlmodel_graphql.types import QueryMeta
 
-# Check if mcp module is available
+# Check if fastmcp module is available
 try:
-    import mcp  # noqa: F401
+    import fastmcp  # noqa: F401
 
     HAS_MCP = True
 except ImportError:
     HAS_MCP = False
+
+
+def _get_tools_dict(mcp):
+    """Get tools as dict {name: tool} from FastMCP (compatible with fastmcp 3.x)."""
+    components = mcp._local_provider._components
+    return {
+        key.split(":")[1].split("@")[0]: value
+        for key, value in components.items()
+        if key.startswith("tool:")
+    }
 
 
 # Mock entities for testing (not test classes)
@@ -92,14 +102,14 @@ class TestSingleAppManager:
         assert "SimpleMCPMockUser" in entity_names
 
 
-@pytest.mark.skipif(not HAS_MCP, reason="mcp package not installed")
+@pytest.mark.skipif(not HAS_MCP, reason="fastmcp package not installed")
 class TestGetSchema:
     """Test cases for get_schema tool."""
 
     def test_get_schema_returns_sdl(self) -> None:
         """Test get_schema returns SDL format."""
         mcp = config_simple_mcp_server(base=SimpleMCPMockBaseEntity)
-        tools = mcp._tool_manager._tools
+        tools = _get_tools_dict(mcp)
         get_schema_tool = tools.get("get_schema")
 
         result = get_schema_tool.fn()
@@ -111,7 +121,7 @@ class TestGetSchema:
     def test_get_schema_includes_mutations(self) -> None:
         """Test get_schema includes mutations when allow_mutation=True."""
         mcp = config_simple_mcp_server(base=SimpleMCPMockBaseEntity, allow_mutation=True)
-        tools = mcp._tool_manager._tools
+        tools = _get_tools_dict(mcp)
         get_schema_tool = tools.get("get_schema")
 
         result = get_schema_tool.fn()
@@ -122,7 +132,7 @@ class TestGetSchema:
     def test_get_schema_excludes_mutations_by_default(self) -> None:
         """Test get_schema excludes mutations when allow_mutation=False (default)."""
         mcp = config_simple_mcp_server(base=SimpleMCPMockBaseEntity)
-        tools = mcp._tool_manager._tools
+        tools = _get_tools_dict(mcp)
         get_schema_tool = tools.get("get_schema")
 
         result = get_schema_tool.fn()
@@ -132,7 +142,7 @@ class TestGetSchema:
         assert "type Mutation" not in result["data"]["sdl"]
 
 
-@pytest.mark.skipif(not HAS_MCP, reason="mcp package not installed")
+@pytest.mark.skipif(not HAS_MCP, reason="fastmcp package not installed")
 class TestGraphQLQuery:
     """Test cases for graphql_query tool."""
 
@@ -140,7 +150,7 @@ class TestGraphQLQuery:
     async def test_graphql_query_with_valid_query(self) -> None:
         """Test graphql_query with valid query."""
         mcp = config_simple_mcp_server(base=SimpleMCPMockBaseEntity)
-        tools = mcp._tool_manager._tools
+        tools = _get_tools_dict(mcp)
         graphql_query_tool = tools.get("graphql_query")
 
         result = await graphql_query_tool.fn(
@@ -154,7 +164,7 @@ class TestGraphQLQuery:
     async def test_graphql_query_with_invalid_syntax(self) -> None:
         """Test graphql_query with invalid syntax."""
         mcp = config_simple_mcp_server(base=SimpleMCPMockBaseEntity)
-        tools = mcp._tool_manager._tools
+        tools = _get_tools_dict(mcp)
         graphql_query_tool = tools.get("graphql_query")
 
         result = await graphql_query_tool.fn(query="{ invalid syntax }")
@@ -167,7 +177,7 @@ class TestGraphQLQuery:
     async def test_graphql_query_with_empty_query(self) -> None:
         """Test graphql_query with empty query."""
         mcp = config_simple_mcp_server(base=SimpleMCPMockBaseEntity)
-        tools = mcp._tool_manager._tools
+        tools = _get_tools_dict(mcp)
         graphql_query_tool = tools.get("graphql_query")
 
         result = await graphql_query_tool.fn(query="")
@@ -179,7 +189,7 @@ class TestGraphQLQuery:
     async def test_graphql_query_with_none_query(self) -> None:
         """Test graphql_query with None query."""
         mcp = config_simple_mcp_server(base=SimpleMCPMockBaseEntity)
-        tools = mcp._tool_manager._tools
+        tools = _get_tools_dict(mcp)
         graphql_query_tool = tools.get("graphql_query")
 
         result = await graphql_query_tool.fn(query=None)
@@ -191,7 +201,7 @@ class TestGraphQLQuery:
     async def test_graphql_query_with_get_by_id(self) -> None:
         """Test graphql_query with get by ID."""
         mcp = config_simple_mcp_server(base=SimpleMCPMockBaseEntity)
-        tools = mcp._tool_manager._tools
+        tools = _get_tools_dict(mcp)
         graphql_query_tool = tools.get("graphql_query")
 
         result = await graphql_query_tool.fn(
@@ -202,7 +212,7 @@ class TestGraphQLQuery:
         assert "simpleMCPMockUserGetUser" in result["data"]
 
 
-@pytest.mark.skipif(not HAS_MCP, reason="mcp package not installed")
+@pytest.mark.skipif(not HAS_MCP, reason="fastmcp package not installed")
 class TestGraphQLMutation:
     """Test cases for graphql_mutation tool."""
 
@@ -210,7 +220,7 @@ class TestGraphQLMutation:
     async def test_graphql_mutation_create(self) -> None:
         """Test graphql_mutation with create mutation."""
         mcp = config_simple_mcp_server(base=SimpleMCPMockBaseEntity, allow_mutation=True)
-        tools = mcp._tool_manager._tools
+        tools = _get_tools_dict(mcp)
         graphql_mutation_tool = tools.get("graphql_mutation")
 
         result = await graphql_mutation_tool.fn(
@@ -225,7 +235,7 @@ class TestGraphQLMutation:
     async def test_graphql_mutation_with_invalid_syntax(self) -> None:
         """Test graphql_mutation with invalid syntax."""
         mcp = config_simple_mcp_server(base=SimpleMCPMockBaseEntity, allow_mutation=True)
-        tools = mcp._tool_manager._tools
+        tools = _get_tools_dict(mcp)
         graphql_mutation_tool = tools.get("graphql_mutation")
 
         result = await graphql_mutation_tool.fn(mutation="mutation { invalid }")
@@ -237,7 +247,7 @@ class TestGraphQLMutation:
     async def test_graphql_mutation_with_empty_mutation(self) -> None:
         """Test graphql_mutation with empty mutation."""
         mcp = config_simple_mcp_server(base=SimpleMCPMockBaseEntity, allow_mutation=True)
-        tools = mcp._tool_manager._tools
+        tools = _get_tools_dict(mcp)
         graphql_mutation_tool = tools.get("graphql_mutation")
 
         result = await graphql_mutation_tool.fn(mutation="")
@@ -249,7 +259,7 @@ class TestGraphQLMutation:
     async def test_graphql_mutation_with_none_mutation(self) -> None:
         """Test graphql_mutation with None mutation."""
         mcp = config_simple_mcp_server(base=SimpleMCPMockBaseEntity, allow_mutation=True)
-        tools = mcp._tool_manager._tools
+        tools = _get_tools_dict(mcp)
         graphql_mutation_tool = tools.get("graphql_mutation")
 
         result = await graphql_mutation_tool.fn(mutation=None)
@@ -260,12 +270,12 @@ class TestGraphQLMutation:
     def test_mutation_tool_not_registered_by_default(self) -> None:
         """Test graphql_mutation is not registered when allow_mutation=False."""
         mcp = config_simple_mcp_server(base=SimpleMCPMockBaseEntity)
-        tools = mcp._tool_manager._tools
+        tools = _get_tools_dict(mcp)
 
         assert "graphql_mutation" not in tools
 
 
-@pytest.mark.skipif(not HAS_MCP, reason="mcp package not installed")
+@pytest.mark.skipif(not HAS_MCP, reason="fastmcp package not installed")
 class TestConfigSimpleMCPServer:
     """Test cases for config_simple_mcp_server function."""
 
@@ -287,7 +297,7 @@ class TestConfigSimpleMCPServer:
     def test_config_simple_mcp_server_tools_registered(self) -> None:
         """Test that only 2 tools are registered by default (allow_mutation=False)."""
         mcp = config_simple_mcp_server(base=SimpleMCPMockBaseEntity)
-        tools = mcp._tool_manager._tools
+        tools = _get_tools_dict(mcp)
 
         # Should only have 2 tools by default
         assert len(tools) == 2
@@ -307,7 +317,7 @@ class TestConfigSimpleMCPServer:
     def test_config_simple_mcp_server_tools_with_mutation(self) -> None:
         """Test that 3 tools are registered when allow_mutation=True."""
         mcp = config_simple_mcp_server(base=SimpleMCPMockBaseEntity, allow_mutation=True)
-        tools = mcp._tool_manager._tools
+        tools = _get_tools_dict(mcp)
 
         # Should have 3 tools
         assert len(tools) == 3
@@ -318,7 +328,7 @@ class TestConfigSimpleMCPServer:
     def test_config_simple_mcp_server_no_app_name_parameter(self) -> None:
         """Test that tools do not require app_name parameter."""
         mcp = config_simple_mcp_server(base=SimpleMCPMockBaseEntity, allow_mutation=True)
-        tools = mcp._tool_manager._tools
+        tools = _get_tools_dict(mcp)
 
         # Check graphql_query tool signature
         graphql_query_tool = tools.get("graphql_query")
@@ -337,7 +347,7 @@ class TestConfigSimpleMCPServer:
         assert "app_name" not in params
 
 
-@pytest.mark.skipif(not HAS_MCP, reason="mcp package not installed")
+@pytest.mark.skipif(not HAS_MCP, reason="fastmcp package not installed")
 class TestSimpleMCPIntegration:
     """Integration tests for simplified MCP server."""
 
@@ -345,7 +355,7 @@ class TestSimpleMCPIntegration:
     async def test_full_workflow(self) -> None:
         """Test full workflow: get schema -> query -> mutation."""
         mcp = config_simple_mcp_server(base=SimpleMCPMockBaseEntity, allow_mutation=True)
-        tools = mcp._tool_manager._tools
+        tools = _get_tools_dict(mcp)
 
         # Step 1: Get schema
         get_schema_tool = tools.get("get_schema")
@@ -378,7 +388,7 @@ class TestSimpleMCPIntegration:
     async def test_read_only_workflow(self) -> None:
         """Test read-only workflow: get schema -> query (no mutations)."""
         mcp = config_simple_mcp_server(base=SimpleMCPMockBaseEntity)
-        tools = mcp._tool_manager._tools
+        tools = _get_tools_dict(mcp)
 
         # Step 1: Get schema - should not include mutations
         get_schema_tool = tools.get("get_schema")

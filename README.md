@@ -84,7 +84,7 @@ Or with uv:
 
 ```bash
 uv add sqlmodel-graphql
-uv add sqlmodel-graphql[mcp]  # include mcp server
+uv add sqlmodel-graphql[fastmcp]  # include mcp server
 ```
 
 ## Demo
@@ -99,8 +99,8 @@ uv run python -m demo.app
 running MCP demo
 
 ```bash
-uv run --with mcp python -m demo.mcp_server   # stdio mode
-uv run --with mcp python -m demo.mcp_server --http   # http mode
+uv run --with fastmcp python -m demo.mcp_server   # stdio mode
+uv run --with fastmcp python -m demo.mcp_server --http   # http mode
 ```
 
 
@@ -431,14 +431,14 @@ mcp.run()
 ### Installation
 
 ```bash
-pip install sqlmodel-graphql[mcp]
+pip install sqlmodel-graphql[fastmcp]
 ```
 
 ### Running MCP Server
 
 ```bash
-uv run --with mcp python -m demo.mcp_server   # stdio mode
-uv run --with mcp python -m demo.mcp_server --http   # http mode
+uv run --with fastmcp python -m demo.mcp_server   # stdio mode
+uv run --with fastmcp python -m demo.mcp_server --http   # http mode
 ```
 
 ## API Reference

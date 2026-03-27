@@ -11,9 +11,9 @@ from sqlmodel_graphql.mcp.types.errors import (
     create_success_response,
 )
 
-# Check if mcp module is available
+# Check if fastmcp module is available
 try:
-    import mcp  # noqa: F401
+    import fastmcp  # noqa: F401
 
     HAS_MCP = True
 except ImportError:
@@ -182,7 +182,7 @@ class TestSchemaFormatter:
         assert "type" in id_arg
 
 
-@pytest.mark.skipif(not HAS_MCP, reason="mcp package not installed")
+@pytest.mark.skipif(not HAS_MCP, reason="fastmcp package not installed")
 class TestMCPServerCreation:
     """Tests for MCP server creation."""
 

@@ -14,7 +14,7 @@ from sqlmodel_graphql.mcp.types.errors import (
 )
 
 if TYPE_CHECKING:
-    from mcp.server.fastmcp import FastMCP
+    from fastmcp import FastMCP
 
     from sqlmodel_graphql.handler import GraphQLHandler
 

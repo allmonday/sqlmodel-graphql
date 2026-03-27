@@ -5,10 +5,20 @@ from sqlmodel import Field, SQLModel
 
 from sqlmodel_graphql import mutation, query
 
-# Skip all tests in this module if mcp is not installed
-pytest.importorskip("mcp")
+# Skip all tests in this module if fastmcp is not installed
+pytest.importorskip("fastmcp")
 
 from sqlmodel_graphql.mcp import create_mcp_server  # noqa: E402
+
+
+def _get_tools_dict(mcp):
+    """Get tools as dict {name: tool} from FastMCP (compatible with fastmcp 3.x)."""
+    components = mcp._local_provider._components
+    return {
+        key.split(":")[1].split("@")[0]: value
+        for key, value in components.items()
+        if key.startswith("tool:")
+    }
 
 
 # Test models for App 1
@@ -96,7 +106,7 @@ class TestMultiAppTools:
     def test_list_apps_tool(self, multi_app_mcp):
         """Test list_apps tool returns all configured apps."""
         # Get the tool
-        tools = multi_app_mcp._tool_manager._tools
+        tools = _get_tools_dict(multi_app_mcp)
         list_apps_tool = tools.get("list_apps")
 
         assert list_apps_tool is not None
@@ -121,7 +131,7 @@ class TestMultiAppTools:
 
     def test_list_queries_with_valid_app(self, multi_app_mcp):
         """Test list_queries tool with a valid app_name."""
-        tools = multi_app_mcp._tool_manager._tools
+        tools = _get_tools_dict(multi_app_mcp)
         list_queries_tool = tools.get("list_queries")
 
         result = list_queries_tool.fn(app_name="blog")
@@ -137,7 +147,7 @@ class TestMultiAppTools:
 
     def test_list_queries_with_invalid_app(self, multi_app_mcp):
         """Test list_queries tool with an invalid app_name."""
-        tools = multi_app_mcp._tool_manager._tools
+        tools = _get_tools_dict(multi_app_mcp)
         list_queries_tool = tools.get("list_queries")
 
         result = list_queries_tool.fn(app_name="nonexistent")
@@ -148,7 +158,7 @@ class TestMultiAppTools:
 
     def test_list_mutations_with_valid_app(self, multi_app_mcp):
         """Test list_mutations tool with a valid app_name."""
-        tools = multi_app_mcp._tool_manager._tools
+        tools = _get_tools_dict(multi_app_mcp)
         list_mutations_tool = tools.get("list_mutations")
 
         result = list_mutations_tool.fn(app_name="shop")
@@ -164,7 +174,7 @@ class TestMultiAppTools:
 
     def test_list_mutations_with_invalid_app(self, multi_app_mcp):
         """Test list_mutations tool with an invalid app_name."""
-        tools = multi_app_mcp._tool_manager._tools
+        tools = _get_tools_dict(multi_app_mcp)
         list_mutations_tool = tools.get("list_mutations")
 
         result = list_mutations_tool.fn(app_name="nonexistent")
@@ -174,7 +184,7 @@ class TestMultiAppTools:
 
     def test_get_query_schema_sdl_format(self, multi_app_mcp):
         """Test get_query_schema tool with SDL format."""
-        tools = multi_app_mcp._tool_manager._tools
+        tools = _get_tools_dict(multi_app_mcp)
         get_query_schema_tool = tools.get("get_query_schema")
 
         # First get the list of queries to find a valid query name
@@ -192,7 +202,7 @@ class TestMultiAppTools:
 
     def test_get_query_schema_introspection_format(self, multi_app_mcp):
         """Test get_query_schema tool with introspection format."""
-        tools = multi_app_mcp._tool_manager._tools
+        tools = _get_tools_dict(multi_app_mcp)
         get_query_schema_tool = tools.get("get_query_schema")
 
         # First get the list of queries to find a valid query name
@@ -210,7 +220,7 @@ class TestMultiAppTools:
 
     def test_get_query_schema_invalid_query(self, multi_app_mcp):
         """Test get_query_schema tool with an invalid query name."""
-        tools = multi_app_mcp._tool_manager._tools
+        tools = _get_tools_dict(multi_app_mcp)
         get_query_schema_tool = tools.get("get_query_schema")
 
         result = get_query_schema_tool.fn(
@@ -222,7 +232,7 @@ class TestMultiAppTools:
 
     def test_get_mutation_schema_sdl_format(self, multi_app_mcp):
         """Test get_mutation_schema tool with SDL format."""
-        tools = multi_app_mcp._tool_manager._tools
+        tools = _get_tools_dict(multi_app_mcp)
         get_mutation_schema_tool = tools.get("get_mutation_schema")
 
         # First get the list of mutations to find a valid mutation name
@@ -241,7 +251,7 @@ class TestMultiAppTools:
     @pytest.mark.asyncio
     async def test_graphql_query_with_valid_app(self, multi_app_mcp):
         """Test graphql_query tool with a valid app_name."""
-        tools = multi_app_mcp._tool_manager._tools
+        tools = _get_tools_dict(multi_app_mcp)
         graphql_query_tool = tools.get("graphql_query")
 
         result = await graphql_query_tool.fn(
@@ -254,7 +264,7 @@ class TestMultiAppTools:
     @pytest.mark.asyncio
     async def test_graphql_query_with_invalid_app(self, multi_app_mcp):
         """Test graphql_query tool with an invalid app_name."""
-        tools = multi_app_mcp._tool_manager._tools
+        tools = _get_tools_dict(multi_app_mcp)
         graphql_query_tool = tools.get("graphql_query")
 
         result = await graphql_query_tool.fn(
@@ -267,7 +277,7 @@ class TestMultiAppTools:
     @pytest.mark.asyncio
     async def test_graphql_query_empty_query(self, multi_app_mcp):
         """Test graphql_query tool with an empty query."""
-        tools = multi_app_mcp._tool_manager._tools
+        tools = _get_tools_dict(multi_app_mcp)
         graphql_query_tool = tools.get("graphql_query")
 
         result = await graphql_query_tool.fn(query="", app_name="blog")
@@ -278,7 +288,7 @@ class TestMultiAppTools:
     @pytest.mark.asyncio
     async def test_graphql_mutation_with_valid_app(self, multi_app_mcp):
         """Test graphql_mutation tool with a valid app_name."""
-        tools = multi_app_mcp._tool_manager._tools
+        tools = _get_tools_dict(multi_app_mcp)
         graphql_mutation_tool = tools.get("graphql_mutation")
 
         result = await graphql_mutation_tool.fn(
@@ -293,7 +303,7 @@ class TestMultiAppTools:
     @pytest.mark.asyncio
     async def test_graphql_mutation_with_invalid_app(self, multi_app_mcp):
         """Test graphql_mutation tool with an invalid app_name."""
-        tools = multi_app_mcp._tool_manager._tools
+        tools = _get_tools_dict(multi_app_mcp)
         graphql_mutation_tool = tools.get("graphql_mutation")
 
         result = await graphql_mutation_tool.fn(
@@ -306,7 +316,7 @@ class TestMultiAppTools:
     @pytest.mark.asyncio
     async def test_graphql_mutation_empty_mutation(self, multi_app_mcp):
         """Test graphql_mutation tool with an empty mutation."""
-        tools = multi_app_mcp._tool_manager._tools
+        tools = _get_tools_dict(multi_app_mcp)
         graphql_mutation_tool = tools.get("graphql_mutation")
 
         result = await graphql_mutation_tool.fn(mutation="", app_name="shop")
@@ -316,7 +326,7 @@ class TestMultiAppTools:
 
     def test_apps_are_isolated(self, multi_app_mcp):
         """Test that queries to different apps return different schemas."""
-        tools = multi_app_mcp._tool_manager._tools
+        tools = _get_tools_dict(multi_app_mcp)
 
         # Get queries from blog app
         list_queries_tool = tools.get("list_queries")
@@ -356,7 +366,7 @@ class TestMultiAppToolsReadOnlyMode:
 
     def test_list_apps_mutations_count_zero(self, read_only_mcp):
         """Test list_apps returns mutations_count=0 when allow_mutation=False."""
-        tools = read_only_mcp._tool_manager._tools
+        tools = _get_tools_dict(read_only_mcp)
         list_apps_tool = tools.get("list_apps")
 
         result = list_apps_tool.fn()
@@ -368,7 +378,7 @@ class TestMultiAppToolsReadOnlyMode:
 
     def test_mutation_tools_not_registered(self, read_only_mcp):
         """Test mutation-related tools are not registered when allow_mutation=False."""
-        tools = read_only_mcp._tool_manager._tools
+        tools = _get_tools_dict(read_only_mcp)
 
         # These tools should NOT be registered
         assert "list_mutations" not in tools
@@ -383,7 +393,7 @@ class TestMultiAppToolsReadOnlyMode:
 
     def test_query_tools_still_work(self, read_only_mcp):
         """Test query tools still work in read-only mode."""
-        tools = read_only_mcp._tool_manager._tools
+        tools = _get_tools_dict(read_only_mcp)
 
         # Test list_queries
         list_queries_tool = tools.get("list_queries")
