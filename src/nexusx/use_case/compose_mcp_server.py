@@ -289,6 +289,7 @@ def _register_compose_query(
     async def compose_query(
         app_name: str,
         query: str,
+        variables: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Execute a GraphQL query against an app's UseCase compose schema.
 
@@ -297,6 +298,17 @@ def _register_compose_query(
         Introspection queries (``__schema``, ``__type``, ``__typename``) are
         rejected — use ``describe_compose_schema`` and
         ``describe_compose_method`` for schema discovery.
+
+        Pass string arguments via ``variables`` — never inline them as GraphQL
+        string literals. Inline strings containing quotes (``"``), backslashes
+        or newlines produce unparseable queries; ``variables`` sidesteps all
+        escaping::
+
+            query: 'mutation($t: String!) { TaskService { create_task(title: $t) { id } } }'
+            variables: {"t": 'He said "hi" \\ done'}
+
+        A query that declares ``$variables`` fails fast with a clear error if
+        the values are missing.
         """
         entry = _get_app(registry, app_name)
         if entry is None:
@@ -334,4 +346,5 @@ def _register_compose_query(
             schema=entry.schema,
             query=query,
             context=context,
+            variables=variables,
         )

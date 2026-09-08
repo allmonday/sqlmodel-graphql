@@ -74,6 +74,7 @@ async def execute_compose_query(
     schema: ComposeSchema,
     query: str,
     context: dict[str, Any] | None = None,
+    variables: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Execute a UseCase compose query, returning graphql-standard ``{data, errors}``.
 
@@ -86,6 +87,10 @@ async def execute_compose_query(
         schema: The ``ComposeSchema`` derived from ``app``.
         query: Standard GraphQL query string.
         context: ``FromContext`` parameter values, keyed by parameter name.
+        variables: Values for ``$variables`` declared by the query. Pass string
+            arguments this way instead of inlining them as GraphQL literals —
+            inline strings containing quotes, backslashes or newlines are the
+            #1 source of agent-authored parse errors.
 
     Returns:
         ``{"data": <nested service→method→result>, "errors": []}`` on success;
@@ -98,6 +103,27 @@ async def execute_compose_query(
     except Exception as exc:  # noqa: BLE001 — graphql parse errors vary in shape
         return _error_response(f"Failed to parse query: {exc}")
 
+    # 1.5 Variables contract check — friendly failure before any execution.
+    #     Without it, a missing variable silently resolves to graphql's
+    #     Undefined and dies later inside argument coercion with a cryptic
+    #     message. Variables belong to the (single) operation's definitions.
+    defined_vars: list[str] = []
+    for definition in document.definitions:
+        if isinstance(definition, OperationDefinitionNode):
+            defined_vars = [
+                vd.variable.name.value for vd in (definition.variable_definitions or [])
+            ]
+            break
+    if defined_vars and variables is None:
+        return _error_response(
+            f"Query declares variables {defined_vars} but none were provided — "
+            "pass them via the 'variables' argument (recommended for any "
+            "string containing quotes, backslashes or newlines)."
+        )
+    missing_vars = [name for name in defined_vars if name not in (variables or {})]
+    if missing_vars:
+        return _error_response(f"Missing variables: {missing_vars}.")
+
     # 2. Reject introspection (FR-008) before any service call.
     if _document_uses_introspection(document):
         return _error_response(_INTROSPECTION_REJECTION_HINT)
@@ -109,9 +135,11 @@ async def execute_compose_query(
     #    contaminated same-name groups across operations). compose_query
     #    takes a bare query string with no operationName channel, so the
     #    document must contain exactly one operation.
+    #    Variables resolve to their values during argument extraction
+    #    (QueryParser.parse_operations forwards them).
     parser = QueryParser()
     try:
-        operations = parser.parse_operations(document)
+        operations = parser.parse_operations(document, variables)
     except ValueError as exc:
         return _error_response(str(exc), code="ALIAS_CONFLICT")
     if not operations:
