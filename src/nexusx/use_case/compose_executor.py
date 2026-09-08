@@ -50,6 +50,16 @@ _INTROSPECTION_REJECTION_HINT = (
     "to discover the schema."
 )
 
+# Appended to variables-contract errors when the query declares a variable
+# default ($t: String = "x"). GraphQL spec would apply the default; nexusx's
+# parser resolves variables purely from the provided dict (value_from_ast_
+# untyped never reads default_value), so defaulted variables are required too
+# — the error must say so instead of contradicting the query.
+_VARIABLE_DEFAULTS_NOTE = (
+    " Variable default values are not supported; every declared variable "
+    "must be passed explicitly."
+)
+
 
 # ---------------------------------------------------------------------------
 # Public API
@@ -90,7 +100,9 @@ async def execute_compose_query(
         variables: Values for ``$variables`` declared by the query. Pass string
             arguments this way instead of inlining them as GraphQL literals —
             inline strings containing quotes, backslashes or newlines are the
-            #1 source of agent-authored parse errors.
+            #1 source of agent-authored parse errors. Every declared variable
+            must be provided: variable default values (``$t: String = "x"``)
+            are not applied.
 
     Returns:
         ``{"data": <nested service→method→result>, "errors": []}`` on success;
@@ -107,22 +119,34 @@ async def execute_compose_query(
     #     Without it, a missing variable silently resolves to graphql's
     #     Undefined and dies later inside argument coercion with a cryptic
     #     message. Variables belong to the (single) operation's definitions.
+    #     Declared defaults ($t: String = "x") count as declared variables:
+    #     they are never auto-applied (see _VARIABLE_DEFAULTS_NOTE), so the
+    #     error names the limitation only when the query uses one — a plain
+    #     $t: String! omission keeps a to-the-point message.
     defined_vars: list[str] = []
+    defaulted_vars: set[str] = set()
     for definition in document.definitions:
         if isinstance(definition, OperationDefinitionNode):
-            defined_vars = [
-                vd.variable.name.value for vd in (definition.variable_definitions or [])
-            ]
+            for vd in definition.variable_definitions or []:
+                defined_vars.append(vd.variable.name.value)
+                if vd.default_value is not None:
+                    defaulted_vars.add(vd.variable.name.value)
             break
     if defined_vars and variables is None:
-        return _error_response(
+        message = (
             f"Query declares variables {defined_vars} but none were provided — "
             "pass them via the 'variables' argument (recommended for any "
             "string containing quotes, backslashes or newlines)."
         )
+        if defaulted_vars:
+            message += _VARIABLE_DEFAULTS_NOTE
+        return _error_response(message)
     missing_vars = [name for name in defined_vars if name not in (variables or {})]
     if missing_vars:
-        return _error_response(f"Missing variables: {missing_vars}.")
+        message = f"Missing variables: {missing_vars}."
+        if set(missing_vars) & defaulted_vars:
+            message += _VARIABLE_DEFAULTS_NOTE
+        return _error_response(message)
 
     # 2. Reject introspection (FR-008) before any service call.
     if _document_uses_introspection(document):

@@ -339,13 +339,45 @@ class TestLayer3ComposeQuery:
             {
                 "app_name": "project",
                 "query": (
-                    "mutation($a: String!, $b: String!) { TaskService { create_task(title: $a) { id } } }"
+                    "mutation($a: String!, $b: String!) "
+                    "{ TaskService { create_task(title: $a) { id } } }"
                 ),
                 "variables": {"a": "x"},
             },
         )
         assert data["data"] is None
         assert "Missing variables: ['b']" in data["errors"][0]["message"]
+
+    async def test_variable_default_value_names_the_limitation(self, mcp_server) -> None:
+        """Declared defaults ($t: String = "x") are required too — but the
+        error must say defaults aren't supported, not contradict the query
+        (GraphQL spec would silently apply the default; the parser never did).
+        """
+        data = await _call(
+            mcp_server,
+            "compose_query",
+            {
+                "app_name": "project",
+                "query": (
+                    'mutation($t: String = "fallback") '
+                    "{ TaskService { create_task(title: $t) { id } } }"
+                ),
+            },
+        )
+        assert data["data"] is None
+        msg = data["errors"][0]["message"]
+        assert "declares variables ['t']" in msg
+        assert "default values are not supported" in msg
+        # 反例：纯 $t: String! 漏传时不附加默认值说明（信息保持切题）
+        plain = await _call(
+            mcp_server,
+            "compose_query",
+            {
+                "app_name": "project",
+                "query": "mutation($t: String!) { TaskService { create_task(title: $t) { id } } }",
+            },
+        )
+        assert "default values" not in plain["errors"][0]["message"]
 
 
 # ──────────────────────────────────────────────────────────────────────

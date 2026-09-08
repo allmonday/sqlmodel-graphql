@@ -308,7 +308,9 @@ def _register_compose_query(
             variables: {"t": 'He said "hi" \\ done'}
 
         A query that declares ``$variables`` fails fast with a clear error if
-        the values are missing.
+        the values are missing. Variable default values
+        (``$t: String = "x"``) are not applied — pass every declared variable
+        explicitly.
         """
         entry = _get_app(registry, app_name)
         if entry is None:

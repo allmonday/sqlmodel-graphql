@@ -10,6 +10,28 @@ description: "Release-by-release changelog for nexusx, following semver — majo
 
 > Pre-3.0 history is not included here. See `git log` and the historical tags for changes before 3.0.0.
 
+## 6.3
+
+### 6.3.0 (2026-9-9)
+
+- feat:
+  - **`compose_query` accepts GraphQL variables**: `execute_compose_query`
+    and the MCP Layer 3 `compose_query` tool now take a `variables` dict;
+    `$var` references in arguments resolve to their values through the
+    existing `QueryParser` path (the same one `GraphQLHandler` uses).
+    Pass string arguments this way instead of inlining GraphQL literals —
+    inline strings containing quotes, backslashes or newlines are the #1
+    source of agent-authored parse errors, and variables sidestep escaping
+    entirely. A query that declares variables fails fast with a clear
+    message naming the missing ones, instead of dying later in argument
+    coercion with a cryptic error. Variable default values
+    (`$t: String = "x"`) are not applied — they never were on any
+    execution path; an omitted defaulted variable now also fails fast,
+    with the error naming the limitation (the note appears only when the
+    query actually declares a default), instead of silently becoming
+    `Undefined`. Backward compatible: `variables` is optional and
+    inline-literal queries are unaffected.
+
 ## 6.2
 
 ### 6.2.1 (2026-9-3)
