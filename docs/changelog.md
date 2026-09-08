@@ -21,7 +21,7 @@ description: "Release-by-release changelog for nexusx, following semver — majo
     existing `QueryParser` path (the same one `GraphQLHandler` uses).
     Pass string arguments this way instead of inlining GraphQL literals —
     inline strings containing quotes, backslashes or newlines are the #1
-    source of agent-authored parse errors, and variables sidestep escaping
+    source of agent-authored parse errors, and variables sidesteps escaping
     entirely. A query that declares variables fails fast with a clear
     message naming the missing ones, instead of dying later in argument
     coercion with a cryptic error. Variable default values
@@ -29,8 +29,45 @@ description: "Release-by-release changelog for nexusx, following semver — majo
     execution path; an omitted defaulted variable now also fails fast,
     with the error naming the limitation (the note appears only when the
     query actually declares a default), instead of silently becoming
-    `Undefined`. Backward compatible: `variables` is optional and
-    inline-literal queries are unaffected.
+    `Undefined`. The UseCase GraphiQL demo endpoint forwards request
+    variables too — its old 400 guard predated executor support and made
+    GraphiQL's variables pane unusable. Backward compatible: `variables`
+    is optional and inline-literal queries are unaffected.
+- refactor:
+  - **Single source for GraphQL type mapping (mindmap #13)**: The
+    Python → GraphQL type mapping had 4 parallel implementations and 3
+    scalar tables. `SCALAR_TYPE_MAP` (in `type_converter`) is now the only
+    scalar table — `compose_type_mapper` imports it; `compose_schema.
+    type_ref_to_sdl` is the public single `TypeRef` renderer (the compose
+    MCP server's verbatim copy is deleted); the introspector delegates to
+    `ComposeTypeMapper` + `type_ref_to_sdl` with a fresh mapper per call
+    (the shared instance leaked registrations across describes). Behavior
+    change: `describe` signatures now carry nullability markers consistent
+    with the compose schema (`int` → `Int!`, `datetime` → `DateTime!`,
+    `Optional[list[T]]` → `[T!]!`), and `datetime`/`UUID`/`dict` render
+    correctly instead of via class-name fallback or an invented `JSON`
+    scalar.
+  - **Single `Paged` representation across β/γ/local (mindmap #14)**: The
+    four pagination numbers (limit/offset/order/direction) changed shape
+    ~10 times across the three transports. Now `paged_from_selection()` is
+    the single dispatch-layer read of raw selection args,
+    `paged_wire_params()` the single `Paged` → wire mapping (β GraphQL
+    renderer and γ JSON body both consume it), and `Paged.clamp()` the
+    single clamping implementation, applied at the β dispatch layer
+    against the relationship's `max_page_size` — federation limits were
+    previously forwarded unclamped. Page params also join the loader split
+    key, fixing a defect where concurrent `limit=5`/`limit=10` loads of
+    the same relationship shared one loader instance and overwrote each
+    other's params. API change: `create_dto_remote_loader` drops its four
+    dead pagination kwargs (never effective in-tree).
+  - **Single-source FK detection (mindmap #15)**: The same three-line
+    "does this field carry a FK marker" check was inlined 7 times.
+    `type_utils.is_fk_field_info()` is now the single field-level
+    detector; `get_fk_fields` builds on it and the verbatim copies are
+    deleted. Behavior is byte-identical.
+- chore:
+  - tests: ruff `--fix` mechanical cleanup (unused imports, import
+    sorting); no semantic changes.
 
 ## 6.2
 
