@@ -82,11 +82,13 @@ npx skills add KLR-Pattern/nexusx -s nexusx-4phase -a claude-code
 ```
 
 Then describe the application you want. The prompt below is the actual
-requirement list that kicked off
+prompt that kicked off
 [MindMap X](https://github.com/allmonday/mindmap-x) (translated from the
 original Chinese):
 
 ```text
+/nexusx-4phase
+
 Core requirements:
 
 - A mind map / tree editor
